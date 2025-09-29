@@ -1,5 +1,5 @@
 ffmpeg -f v4l2 -framerate 60 -video_size 640x480 -i /dev/video0 \
--c:v libx264 -preset ultrafast -tune zerolatency -f mpegts udp://192.168.1.98:5000
+-c:v libx264 -preset ultrafast -tune zerolatency -f mpegts udp://192.168.1.64:5000
 
 # ffmpeg
 # └── Command-line tool itself for streaming video/audio.
@@ -30,4 +30,3 @@ ffmpeg -f v4l2 -framerate 60 -video_size 640x480 -i /dev/video0 \
 
 # udp://192.168.1.98:5000
 # └── Specifies the output destination as a UDP stream to the IP address.
-
