@@ -13,7 +13,7 @@ export default function BatteryGauge() {
       title={`Battery Usage: ${batteryUsage} mAh\nBattery Percentage: ${batteryPercentage}%`}
       placement="left"
     >
-      <div className="backdrop-blur-md bg-black/30 border border-white/20 rounded-lg p-2 shadow-lg">
+      <div className="backdrop-blur-sm bg-black-400 border border-white/20 rounded-lg p-2 shadow-lg">
         <div style={{ width: 80, height: 40 }}>
           <CircularProgressbar
           value={batteryUsage}

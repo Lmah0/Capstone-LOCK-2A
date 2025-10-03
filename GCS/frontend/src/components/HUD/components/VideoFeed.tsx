@@ -7,7 +7,7 @@ export default function VideoFeed() {
             <img 
                 src="/testImg.jpg" 
                 alt="Test image"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover pointer-events-none"
             />
         </div>
     );
