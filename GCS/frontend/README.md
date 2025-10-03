@@ -34,3 +34,12 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+https://mui.com/material-ui/react-button/
+https://mui.com/material-ui/react-tabs/
+https://mui.com/material-ui/react-container/
+https://mui.com/material-ui/react-card/
+https://mui.com/material-ui/react-snackbar/
+https://mui.com/material-ui/react-tooltip/
+https://mui.com/material-ui/react-chip/
+https://mui.com/material-ui/react-switch/

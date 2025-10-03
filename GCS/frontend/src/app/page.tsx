@@ -1,11 +1,18 @@
-import { Button } from "@mui/material";
+import GUI from '../components/HUD/HUD';
+import InfoDashBoard from '../components/InfoDashboard/InfoDashBoard';
 
 export default function Home() {
   return (
-    <div className="font-sans items-center justify-items-center min-h-screen p-8 pb-20 sm:p-20">
-      <Button variant="contained" color="primary">
-        Click Me
-      </Button>
+    <div className="font-sans min-h-screen w-full flex flex-col bg-black">
+
+      <div className="h-[68vh] w-full bg-neutral-900 border-b border-neutral-800">
+        <GUI />
+      </div>
+      
+      <div className="h-[32vh] w-full bg-black">
+        <InfoDashBoard />
+      </div>
+
     </div>
   );
 }
