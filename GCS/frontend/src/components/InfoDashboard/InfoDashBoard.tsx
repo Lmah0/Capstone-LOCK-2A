@@ -49,9 +49,11 @@ interface InfoDashBoardProps {
     setShowHUDElements: React.Dispatch<React.SetStateAction<boolean>>;
     isRecording: boolean;
     setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
+    isMetric: boolean;
+    setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording }: InfoDashBoardProps) {
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric }: InfoDashBoardProps) {
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -123,6 +125,8 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                             setShowHUDElements={setShowHUDElements} 
                             isRecording={isRecording}
                             setIsRecording={setIsRecording}
+                            isMetric={isMetric}
+                            setIsMetric={setIsMetric}
                         />
                     </TabPanel>
                     <TabPanel value={value} index={2}>

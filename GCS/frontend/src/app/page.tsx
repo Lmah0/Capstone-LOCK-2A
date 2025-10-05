@@ -7,6 +7,7 @@ export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHUDElements, setShowHUDElements] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
+  const [isMetric, setIsMetric] = useState(true);
 
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
@@ -40,6 +41,8 @@ export default function Home() {
               setShowHUDElements={setShowHUDElements}
               isRecording={isRecording}
               setIsRecording={setIsRecording}
+              isMetric={isMetric}
+              setIsMetric={setIsMetric}
           />
         </div>
       )}
