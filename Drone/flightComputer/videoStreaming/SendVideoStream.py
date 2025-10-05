@@ -25,7 +25,7 @@ def benchmark_ffmpeg(cmd, duration=60):
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     p = psutil.Process(process.pid)
-    cpu_usage, mem_usage, fps_values, size_values, bit_rate_values, speed_values = [], [], [], [], [], []
+    cpu_usage, mem_usage, fps_values, size_values, bit_rate_values, drop_values, speed_values = [], [], [], [], [], [], []
 
     try:
         while time.time() - start_time < duration:
@@ -34,7 +34,8 @@ def benchmark_ffmpeg(cmd, duration=60):
             mem_usage.append(p.memory_info().rss / (1024 * 1024))
 
             pattern = re.compile(
-                r"fps=\s*([\d\.]+)\s+q=.*?size=\s*(\d+)(\wB)\s+time=.*?bitrate=\s*([\d\.]+kbits/s)\s+speed=\s*([\d\.]+)x"
+                r"fps=\s*([\d\.]+)\s+q=.*?size=\s*([\d\w]+B)\s+time=.*?"
+                r"bitrate=\s*([\d\.]+)kbits/s.*?drop=\s*(\d+).*?speed=\s*([\d\.]+)x"
             )
 
             for line in process.stderr:
@@ -42,10 +43,11 @@ def benchmark_ffmpeg(cmd, duration=60):
                         line = line.strip()
                         match = pattern.search(line)
                         if match:
-                            fps, size, bitrate, speed = match.groups()
+                            fps, size, bitrate, drop, speed = match.groups()
                             fps_values.append(fps)
                             size_values.append(size)
                             bit_rate_values.append(bitrate)
+                            drop_values.append(drop)
                             speed_values.append(speed)
                             
 

@@ -33,25 +33,18 @@ class StreamBenchmark:
         min_interval = min(intervals) if intervals else 0
         max_interval = max(intervals) if intervals else 0
 
-        report = {
-            "elapsed_time": elapsed,
-            "frames_received": num_frames,
-            "dropped_frames": self.dropped_frames,
-            "fps": fps,
-            "frame_interval_avg": avg_interval,
-            "frame_interval_min": min_interval,
-            "frame_interval_max": max_interval,
-            "mean_cpu_usage": (
-                sum(self.cpu_usages) / len(self.cpu_usages)
-                if len(self.cpu_usages) > 0
-                else 0
-            ),
-            "mean_ram_usage": (
-                sum(self.ram_usages) / len(self.ram_usages)
-                if len(self.ram_usages) > 0
-                else 0
-            ),
-        }
+        report = (
+            f"elapsed_time: {elapsed} ===\n"
+            f"frames_received: {num_frames}\n"
+            f"dropped_frames: {self.dropped_frames}\n"
+            f"fps: {fps}\n"
+            f"frame_interval_avg: {avg_interval}\n"
+            f"frame_interval_min: {min_interval}\n"
+            f"frame_interval_max: {max_interval}\n"
+            f"mean_cpu_usage: {(sum(self.cpu_usages) / len(self.cpu_usages) if len(self.cpu_usages) > 0 else 0)}\n"
+            f"mean_ram_usage: {(sum(self.ram_usages) / len(self.ram_usages) if len(self.ram_usages) > 0 else 0)}\n"
+        )
+
         with open("benchmark_results_gcs.txt", "a") as f:
             f.write(report)
         return report
