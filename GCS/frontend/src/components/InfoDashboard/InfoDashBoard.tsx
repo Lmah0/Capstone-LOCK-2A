@@ -1,5 +1,3 @@
-
-
 "use client";
 import React, { useState } from 'react';
 import { Tabs, Tab, Box } from '@mui/material';
@@ -46,7 +44,14 @@ function a11yProps(index: number) {
     };
 }
 
-export default function InfoDashBoard() {
+interface InfoDashBoardProps {
+    showHUDElements: boolean;
+    setShowHUDElements: React.Dispatch<React.SetStateAction<boolean>>;
+    isRecording: boolean;
+    setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording }: InfoDashBoardProps) {
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -113,7 +118,12 @@ export default function InfoDashBoard() {
                         <FlightData />
                     </TabPanel>
                     <TabPanel value={value} index={1}>
-                        <Controls />
+                        <Controls 
+                            showHUDElements={showHUDElements} 
+                            setShowHUDElements={setShowHUDElements} 
+                            isRecording={isRecording}
+                            setIsRecording={setIsRecording}
+                        />
                     </TabPanel>
                     <TabPanel value={value} index={2}>
                         <RecordedObjects />

@@ -4,33 +4,48 @@ import VideoFeed from './components/VideoFeed';
 import TelemetryData from './components/TelemetryData';
 import Heading from './components/Heading';
 import FlightMode from './components/FlightMode';
+import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked';
 
-export default function HUD() {
+interface HUDProps {
+    showHUDElements: boolean;
+    isRecording: boolean;
+}
+
+export default function HUD({ showHUDElements, isRecording }: HUDProps) {
 
     return (
         <div className="w-full h-full relative">
             <VideoFeed />
             
-            {/* HUD Area Overlay */}
-            <div className="absolute inset-2 pointer-events-none z-5">
-                <div className="w-full h-full border border-white/20 bg-black/10 rounded-xl"></div>
-            </div>
-            
-            <div className="absolute top-4 left-4 z-10">
-                <ConnectionStatus />
-            </div>
-            <div className="absolute bottom-4 right-4 z-10">
-                <TelemetryData/>
-            </div>
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10">
-                <Heading />
-            </div>
-            <div className="absolute bottom-4 left-4 z-10">
-                <FlightMode />
-            </div>
-            <div className="absolute top-4 right-4 z-10">
-                <Battery />
-            </div>
+        <div className="absolute top-4 left-4 z-10">
+            <ConnectionStatus />
+        </div>
+            {isRecording && (
+                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex items-center space-x-1 px-2 py-1">
+                    <RadioButtonCheckedIcon className="text-red-600 animate-pulse" />
+                </div>
+            )}
+        {/* HUD Area Overlay */}
+        {showHUDElements && (
+            <>
+                <div className="absolute inset-2 pointer-events-none z-5">
+                    <div className="w-full h-full border border-white/20 bg-black/10 rounded-xl"></div>
+                </div>
+                
+                <div className="absolute bottom-4 right-4 z-10">
+                    <TelemetryData/>
+                </div>
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <Heading />
+                </div>
+                <div className="absolute bottom-4 left-4 z-10">
+                    <FlightMode />
+                </div>
+                <div className="absolute top-4 right-4 z-10">
+                    <Battery />
+                </div>
+            </>
+        )}
         </div>
     );
 }

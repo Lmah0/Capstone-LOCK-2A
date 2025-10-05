@@ -1,5 +1,4 @@
 "use client";
-
 import { Box, Paper, Typography, Tooltip } from "@mui/material";
 import SpeedIcon from "@mui/icons-material/Speed"; // speedometer icon
 import FlightIcon from "@mui/icons-material/Flight"; // for altitude
