@@ -18,7 +18,7 @@ ffmpeg_command = [
     "udp://192.168.1.98:5000" # - Specifies the output destination as a UDP stream to the IP address.
 ]
 
-def benchmark_ffmpeg(cmd, duration=10):
+def benchmark_ffmpeg(cmd, duration=60):
     print("Starting FFmpeg stream...")
     start_time = time.time()
 
@@ -79,14 +79,46 @@ def benchmark_ffmpeg(cmd, duration=10):
     with open("benchmark_results_flight_computer.txt", "a") as f:
         f.write(report)
 
-def send_video():
-    pass
+def send_video(cmd):
+    print("Starting FFmpeg stream...")
+    start_time = time.time()
+
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    p = psutil.Process(process.pid)
+    cpu_usage, mem_usage, fps_values, size_values, bit_rate_values, speed_values = [], [], [], [], [], []
+
+    try:
+        while True:
+            # CPU/memory usage
+            cpu_usage.append(p.cpu_percent(interval=1))
+            mem_usage.append(p.memory_info().rss / (1024 * 1024))
+
+            pattern = re.compile(
+                r"fps=\s*([\d\.]+)\s+q=.*?size=\s*(\d+)(\wB)\s+time=.*?bitrate=\s*([\d\.]+kbits/s)\s+speed=\s*([\d\.]+)x"
+            )
+
+            for line in process.stderr:
+                        print(line, end='')
+                        line = line.strip()
+                        match = pattern.search(line)
+                        if match:
+                            fps, size, bitrate, speed = match.groups()
+                            fps_values.append(fps)
+                            size_values.append(size)
+                            bit_rate_values.append(bitrate)
+                            speed_values.append(speed)
+
+    except KeyboardInterrupt:
+        print("Benchmark stopped.")
+    finally:
+        process.terminate()
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "bench":
         benchmark_ffmpeg(ffmpeg_command, duration=60)
     else:
-        send_video()
+        send_video(ffmpeg_command)
 
 
 
