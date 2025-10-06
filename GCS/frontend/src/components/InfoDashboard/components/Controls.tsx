@@ -15,15 +15,12 @@ interface ControlsProps {
 }
 
 export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric }: ControlsProps) {
-
     const handleHudToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         setShowHUDElements(event.target.checked);
     };
-
     const handleRecordingToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         setIsRecording(event.target.checked);
     };
-
     const handleMetricToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         setIsMetric(event.target.value === 'metric');
     };

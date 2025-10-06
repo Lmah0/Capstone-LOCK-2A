@@ -9,8 +9,6 @@ interface TelemetryDataProps {
 }
 
 export default function TelemetryData({ pinnedTelemetry, isMetric }: TelemetryDataProps) {
-
-
   const displayedTelemetry = pinnedTelemetry
     .filter(key => isValidTelemetryKey(key))
     .slice(0, 4); // Limit to 4 items for space

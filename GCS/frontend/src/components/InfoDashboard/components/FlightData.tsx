@@ -2,7 +2,7 @@
 import { Box, Typography, Paper, IconButton, Tooltip } from '@mui/material';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import { formatUnits } from "../../../utils/unitConversions";
-import { telemetryConfig, isValidTelemetryKey, telemetryData } from "../../../utils/telemetryConfig";
+import { telemetryConfig, telemetryData } from "../../../utils/telemetryConfig";
 
 interface FlightDataProps {
     pinnedTelemetry: string[];

@@ -2,7 +2,6 @@
 import ErrorIcon from '@mui/icons-material/Error';
 import Tooltip from '@mui/material/Tooltip';
 
-
 export default function ConnectionStatus() {
 
     return (
@@ -12,5 +11,4 @@ export default function ConnectionStatus() {
             </Tooltip>
         </div>
     );
-
 }
