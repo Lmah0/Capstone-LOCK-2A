@@ -9,9 +9,11 @@ import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked';
 interface HUDProps {
     showHUDElements: boolean;
     isRecording: boolean;
+    pinnedTelemetry: string[];
+    isMetric: boolean;
 }
 
-export default function HUD({ showHUDElements, isRecording }: HUDProps) {
+export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isMetric }: HUDProps) {
 
     return (
         <div className="w-full h-full relative">
@@ -33,13 +35,13 @@ export default function HUD({ showHUDElements, isRecording }: HUDProps) {
                 </div>
                 
                 <div className="absolute bottom-4 right-4 z-10">
-                    <TelemetryData/>
+                    <TelemetryData pinnedTelemetry={pinnedTelemetry} isMetric={isMetric} />
                 </div>
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10">
                     <Heading />
                 </div>
                 <div className="absolute bottom-4 left-4 z-10">
-                    <FlightMode />
+                    <FlightMode isMetric={isMetric} />
                 </div>
                 <div className="absolute top-4 right-4 z-10">
                     <Battery />

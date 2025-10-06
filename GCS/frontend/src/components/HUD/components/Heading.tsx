@@ -14,8 +14,8 @@ export default function Heading() {
                 backgroundColor: "rgba(0,0,0,0.6)", 
                 border: "1px solid rgba(255,255,255,0.3)",
                 color: "white",
-                minWidth: 550,
-                minHeight: 90,
+                minWidth: 650,
+                minHeight: 80,
             }}
         >
         </Paper>

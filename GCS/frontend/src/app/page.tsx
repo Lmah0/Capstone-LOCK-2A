@@ -8,6 +8,20 @@ export default function Home() {
   const [showHUDElements, setShowHUDElements] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [isMetric, setIsMetric] = useState(true);
+  const [pinnedTelemetry, setPinnedTelemetry] = useState<string[]>(['speed', 'altitude', 'latitude', 'longitude']);
+
+  // Load pinned telemetry from localStorage on component mount
+  useEffect(() => {
+    const saved = localStorage.getItem('pinnedTelemetry');
+    if (saved) {
+      setPinnedTelemetry(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save pinned telemetry to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('pinnedTelemetry', JSON.stringify(pinnedTelemetry));
+  }, [pinnedTelemetry]);
 
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
@@ -31,7 +45,7 @@ export default function Home() {
   return (
     <div className="font-sans min-h-screen w-full flex flex-col bg-black">
       <div className={`w-full bg-neutral-900 ${isFullscreen ? 'h-screen' : 'h-[65vh]'} ${!isFullscreen ? 'border-b border-neutral-800' : ''}`}>
-        <HUD showHUDElements={showHUDElements} isRecording={isRecording} />
+        <HUD showHUDElements={showHUDElements} isRecording={isRecording} pinnedTelemetry={pinnedTelemetry} isMetric={isMetric} />
       </div>
       
       {!isFullscreen && (
@@ -43,6 +57,8 @@ export default function Home() {
               setIsRecording={setIsRecording}
               isMetric={isMetric}
               setIsMetric={setIsMetric}
+              pinnedTelemetry={pinnedTelemetry}
+              setPinnedTelemetry={setPinnedTelemetry}
           />
         </div>
       )}

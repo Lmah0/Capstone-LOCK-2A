@@ -27,7 +27,7 @@ function TabPanel(props: TabPanelProps) {
                 <Box sx={{ 
                     p: 3, 
                     height: '100%',
-                    bgcolor: 'rgb(23 23 23)', // bg-neutral-900
+                    bgcolor: 'rgb(23 23 23)',
                     color: 'white',
                 }}>
                     {children}
@@ -51,9 +51,11 @@ interface InfoDashBoardProps {
     setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
     isMetric: boolean;
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
+    pinnedTelemetry: string[];
+    setPinnedTelemetry: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric }: InfoDashBoardProps) {
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry }: InfoDashBoardProps) {
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -67,12 +69,12 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                bgcolor: 'rgb(23 23 23)', // bg-neutral-900
+                bgcolor: 'rgb(23 23 23)',
             }}>
                 <Box sx={{ 
                     borderBottom: 1, 
-                    borderColor: 'rgb(64 64 64)', // border-neutral-700
-                    bgcolor: 'rgb(38 38 38)', // bg-neutral-800
+                    borderColor: 'rgb(64 64 64)',
+                    bgcolor: 'rgb(38 38 38)',
                     px: 2,
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}>
@@ -83,7 +85,7 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                         sx={{
                             minHeight: 56,
                             '& .MuiTab-root': {
-                                color: 'rgb(163 163 163)', // text-neutral-400
+                                color: 'rgb(163 163 163)',
                                 fontWeight: 500,
                                 fontSize: '0.95rem',
                                 textTransform: 'none',
@@ -91,8 +93,8 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                                 px: 3,
                                 transition: 'all 0.2s ease-in-out',
                                 '&:hover': {
-                                    color: 'rgb(212 212 212)', // text-neutral-300
-                                    bgcolor: 'rgba(64, 64, 64, 0.3)', // hover effect
+                                    color: 'rgb(212 212 212)',
+                                    bgcolor: 'rgba(64, 64, 64, 0.3)',
                                 },
                                 '&.Mui-selected': {
                                     color: 'white',
@@ -100,13 +102,13 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                                 },
                             },
                             '& .MuiTabs-indicator': {
-                                backgroundColor: '#3b82f6', // blue-500
+                                backgroundColor: '#3b82f6',
                                 height: 3,
                                 borderRadius: '2px 2px 0 0',
                             },
                         }}
                     >
-                        <Tab label="Flight Data" {...a11yProps(0)} />
+                        <Tab label="Flight Telemetry" {...a11yProps(0)} />
                         <Tab label="Controls" {...a11yProps(1)} />
                         <Tab label="Recorded Objects" {...a11yProps(2)} />
                     </Tabs>
@@ -114,10 +116,10 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                 <Box sx={{ 
                     flex: 1, 
                     overflow: 'auto',
-                    bgcolor: 'rgb(23 23 23)', // bg-neutral-900
+                    bgcolor: 'rgb(23 23 23)',
                 }}>
                     <TabPanel value={value} index={0}>
-                        <FlightData />
+                        <FlightData pinnedTelemetry={pinnedTelemetry} setPinnedTelemetry={setPinnedTelemetry} isMetric={isMetric} />
                     </TabPanel>
                     <TabPanel value={value} index={1}>
                         <Controls 
