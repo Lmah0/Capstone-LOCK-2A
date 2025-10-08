@@ -50,7 +50,12 @@ export default function RecordedObjects() {
     ];
 
     const handleObjectClick = (objectId: string) => {
-        window.open(`/recorded-object/${objectId}`, '_blank');
+        // CHANGE TO PROPER URL LATER
+        const recordingAnalysisUrl = `http://localhost:3003?objectId=${objectId}`; 
+        const newWindow = window.open(recordingAnalysisUrl, `recording-analysis-${objectId}`);  
+        if (newWindow) {
+            newWindow.focus();
+        }
     };
 
     const getTypeColor = (type: string) => {
