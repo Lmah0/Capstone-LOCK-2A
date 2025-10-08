@@ -2,13 +2,22 @@
 import ErrorIcon from '@mui/icons-material/Error';
 import Tooltip from '@mui/material/Tooltip';
 
-export default function ConnectionStatus() {
+interface ConnectionStatusProps {
+    isConnected: boolean;
+}
+
+export default function ConnectionStatus({ isConnected }: ConnectionStatusProps) {
 
     return (
         <div>
-            <Tooltip title="Vehicle connection has been lost">
-                <ErrorIcon color="error" sx={{ fontSize: 42 }} />
-            </Tooltip>
+            {isConnected ? (
+                <>
+                </>
+            ) : (
+                <Tooltip title="Vehicle connection has been lost">
+                    <ErrorIcon color="error" sx={{ fontSize: 42 }} />
+                </Tooltip>
+            )}
         </div>
     );
 }
