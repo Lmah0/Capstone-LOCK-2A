@@ -53,9 +53,13 @@ interface InfoDashBoardProps {
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
     pinnedTelemetry: string[];
     setPinnedTelemetry: React.Dispatch<React.SetStateAction<string[]>>;
+    followDistance: number;
+    setFollowDistance: React.Dispatch<React.SetStateAction<number>>;
+    flightMode: string;
+    setFlightMode: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry }: InfoDashBoardProps) {
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -129,6 +133,10 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                             setIsRecording={setIsRecording}
                             isMetric={isMetric}
                             setIsMetric={setIsMetric}
+                            followDistance={followDistance}
+                            setFollowDistance={setFollowDistance}
+                            flightMode={flightMode}
+                            setFlightMode={setFlightMode}
                         />
                     </TabPanel>
                     <TabPanel value={value} index={2}>

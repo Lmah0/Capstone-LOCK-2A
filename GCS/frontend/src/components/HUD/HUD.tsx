@@ -11,9 +11,11 @@ interface HUDProps {
     isRecording: boolean;
     pinnedTelemetry: string[];
     isMetric: boolean;
+    followDistance: number;
+    flightMode: string;
 }
 
-export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isMetric }: HUDProps) {
+export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isMetric, followDistance, flightMode }: HUDProps) {
 
     return (
         <div className="w-full h-full relative">
@@ -41,7 +43,7 @@ export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isM
                     <Heading />
                 </div>
                 <div className="absolute bottom-4 left-4 z-10">
-                    <FlightMode isMetric={isMetric} />
+                    <FlightMode isMetric={isMetric} followDistance={followDistance} flightMode={flightMode} />
                 </div>
                 <div className="absolute top-4 right-4 z-10">
                     <Battery />

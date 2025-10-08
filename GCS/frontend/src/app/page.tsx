@@ -9,6 +9,8 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [isMetric, setIsMetric] = useState(true);
   const [pinnedTelemetry, setPinnedTelemetry] = useState<string[]>(['speed', 'altitude', 'latitude', 'longitude']);
+  const [followDistance, setFollowDistance] = useState(20.0);
+  const [flightMode, setFlightMode] = useState('');
 
   // Load pinned telemetry from localStorage on component mount
   useEffect(() => {
@@ -45,7 +47,14 @@ export default function Home() {
   return (
     <div className="font-sans min-h-screen w-full flex flex-col bg-black">
       <div className={`w-full bg-neutral-900 ${isFullscreen ? 'h-screen' : 'h-[65vh]'} ${!isFullscreen ? 'border-b border-neutral-800' : ''}`}>
-        <HUD showHUDElements={showHUDElements} isRecording={isRecording} pinnedTelemetry={pinnedTelemetry} isMetric={isMetric} />
+        <HUD 
+            showHUDElements={showHUDElements} 
+            isRecording={isRecording} 
+            pinnedTelemetry={pinnedTelemetry} 
+            isMetric={isMetric} 
+            followDistance={followDistance}
+            flightMode={flightMode}
+        />
       </div>
       
       {!isFullscreen && (
@@ -59,6 +68,10 @@ export default function Home() {
               setIsMetric={setIsMetric}
               pinnedTelemetry={pinnedTelemetry}
               setPinnedTelemetry={setPinnedTelemetry}
+              followDistance={followDistance}
+              setFollowDistance={setFollowDistance}
+              flightMode={flightMode}
+              setFlightMode={setFlightMode}
           />
         </div>
       )}
