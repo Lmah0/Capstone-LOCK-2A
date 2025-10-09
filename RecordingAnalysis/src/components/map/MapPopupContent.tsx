@@ -2,29 +2,20 @@
 import React from "react";
 import { Card, CardContent, Typography, Box, Stack, Divider } from "@mui/material";
 import { Speed, AccessTime, Place, Navigation, Height, Timeline } from "@mui/icons-material";
-import { TelemetryPoint, Coordinates } from "@/utils/types";
+import { popupData } from "@/utils/types";
 
 interface MapPopupContentProps {
-  coords?: Coordinates;
-  telemetryPoint?: TelemetryPoint;
-  speed?: string;
-  timestamp?: number;
-  pointIndex?: number;
+  telemetrydata: popupData;
 }
 
-export const MapPopupContent: React.FC<MapPopupContentProps> = ({
-  coords,
-  telemetryPoint,
-  speed,
-  timestamp,
-  pointIndex,
-}) => {
-  const longitude = telemetryPoint?.longitude || coords?.[0] || 0;
-  const latitude = telemetryPoint?.latitude || coords?.[1] || 0;
-  const altitude = telemetryPoint?.altitude;
-  const actualSpeed = telemetryPoint?.speed?.toFixed(1) || speed || "N/A";
-  const heading = telemetryPoint?.heading;
-  const actualTimestamp = telemetryPoint?.timestamp || timestamp;
+export const MapPopupContent: React.FC<MapPopupContentProps> = ({telemetrydata}) => {
+  const { telemetryPoint, pointIndex } = telemetrydata;
+  const longitude = telemetryPoint.longitude || 0;
+  const latitude = telemetryPoint.latitude || 0;
+  const altitude = telemetryPoint.altitude || 0;
+  const actualSpeed = telemetryPoint.speed.toFixed(2) || "N/A";
+  const heading = telemetryPoint.heading;
+  const actualTimestamp = telemetryPoint.timestamp;
   
   const formatTime = (timestamp?: string | number) => {
     if (!timestamp) return "N/A";

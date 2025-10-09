@@ -4,33 +4,22 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MapPopupContent } from "./MapPopupContent";
 import { useMapAnimation } from "@/hooks/useMapAnimation";
-import { calculateBearing, offsetBehind } from "@/utils/mapUtils";
+import { calculateBearing, offsetBehind, telemetryToCoordinates } from "@/utils/mapUtils";
 import { DEFAULT_MAP_CONFIG, DEFAULT_ANIMATION_CONFIG, DEFAULT_TERRAIN_CONFIG, DEFAULT_SKY_CONFIG } from "@/utils/constants";
-import { TelemetryPoint, Coordinates } from "@/utils/types";
+import { TelemetryPoint, Coordinates, popupData } from "@/utils/types";
 
 interface MapComponentProps {
-  coordinates: Coordinates[];
-  telemetryData?: TelemetryPoint[];
-  isPlaying?: boolean;
-  restartTrigger?: number;
-  skipTrigger?: number;
+  telemetryData: TelemetryPoint[];
+  isPlaying: boolean;
+  restartTrigger: number;
+  skipTrigger: number;
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
-  className?: string;
 }
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
-export const MapComponent: React.FC<MapComponentProps> = ({
-  coordinates,
-  telemetryData,
-  isPlaying,
-  restartTrigger,
-  skipTrigger,
-  onAnimationStart,
-  onAnimationEnd,
-  className = "",
-}) => {
+export const MapComponent: React.FC<MapComponentProps> = ({telemetryData, isPlaying, restartTrigger, skipTrigger, onAnimationStart, onAnimationEnd}) => {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const marker = useRef<mapboxgl.Marker | null>(null);
@@ -38,14 +27,10 @@ export const MapComponent: React.FC<MapComponentProps> = ({
   const lastRestartTrigger = useRef<number>(0);
   const lastSkipTrigger = useRef<number>(0);
 
+  const coordinates = telemetryToCoordinates(telemetryData);
+
   // State for popup data
-  const [popupData, setPopupData] = useState<{
-    coords: Coordinates;
-    telemetryPoint?: TelemetryPoint;
-    speed: string;
-    timestamp?: number;
-    pointIndex?: number;
-  } | null>(null);
+  const [popupData, setPopupData] = useState<popupData | null>(null);
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | number | null>(null);
 
   const {
@@ -229,7 +214,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
 
     // Wait for camera movement to complete before starting animation
     if (callback) {
-      setTimeout(callback, 1000); // Slightly longer than camera transition
+      setTimeout(callback, 1000);
     }
   };
 
@@ -244,14 +229,8 @@ export const MapComponent: React.FC<MapComponentProps> = ({
       
       const feature = e.features[0];
       if (feature.geometry.type !== "Point") return;
-      
-      const coords = feature.geometry.coordinates as Coordinates;
-      const { speed, timestamp, pointIndex, telemetryIndex } = feature.properties as { 
-        speed: string; 
-        timestamp?: number;
-        pointIndex?: number;
-        telemetryIndex?: number;
-      };
+
+      const { pointIndex, telemetryIndex } = feature.properties as { pointIndex: number; telemetryIndex: number; };
 
       if (selectedFeatureId !== null && selectedFeatureId !== undefined) {
         map.current!.setFeatureState(
@@ -271,14 +250,8 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         );
       }
 
-      const telemetryPoint = telemetryData && telemetryIndex !== undefined ? telemetryData[telemetryIndex] : undefined;
-      setPopupData({
-        coords,
-        telemetryPoint,
-        speed,
-        timestamp,
-        pointIndex
-      });
+      const telemetryPoint = telemetryData[telemetryIndex];
+      setPopupData({ telemetryPoint, pointIndex });
     });
 
     // Handle mouseenter for individual features
@@ -407,7 +380,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
 
   return (
     <div className="relative h-full w-full">
-      <div ref={mapContainer} className={`h-full w-full ${className}`} />
+      <div ref={mapContainer} className={`h-full w-full`} />
       
       {/* Popup overlay positioned at top-left of map */}
       {popupData && (
@@ -430,11 +403,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
               ×
             </button>
             <MapPopupContent 
-              coords={popupData.coords} 
-              telemetryPoint={popupData.telemetryPoint}
-              speed={popupData.speed} 
-              timestamp={popupData.timestamp}
-              pointIndex={popupData.pointIndex}
+              telemetrydata={popupData}
             />
           </div>
         </div>

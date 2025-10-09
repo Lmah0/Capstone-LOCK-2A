@@ -14,7 +14,6 @@ export interface TrajectoryStats {
   maxSpeed: number; // m/s
   totalDistance: number; // meters
   altitudeGain: number; // meters
-  altitudeLoss: number; // meters
   minAltitude: number; // meters
   maxAltitude: number; // meters
   missionDuration: number; // seconds
@@ -24,6 +23,10 @@ export interface TrajectoryStats {
   objectClass: string; // Classified name of the tracked object
 }
 
+export interface popupData {
+    telemetryPoint: TelemetryPoint;
+    pointIndex: number;
+}
 
 export type Coordinates = [number, number];
 

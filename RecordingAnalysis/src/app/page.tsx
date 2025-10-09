@@ -8,7 +8,6 @@ import MissionStats from '../components/MissionStats';
 import { EXAMPLE_TELEMETRY_DATA } from '@/data/exampleTelemetry';
 import { calculateTrajectoryStats } from '@/utils/trajectoryCalculations';
 import { TelemetryPoint, TrajectoryStats } from '@/utils/types';
-import { telemetryToCoordinates } from '@/utils/mapUtils';
 
 export default function HomePage() {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -17,7 +16,6 @@ export default function HomePage() {
   const [skipTrigger, setSkipTrigger] = useState(0);
   const [telemetryData, setTelemetryData] = useState<TelemetryPoint[]>(EXAMPLE_TELEMETRY_DATA);
   const [trajectoryStats, setTrajectoryStats] = useState<TrajectoryStats | null>(null);
-  const [objectID, setObjectID] = useState<string | null>(null);
 
   useEffect(() => {
     if (telemetryData.length > 0) {
@@ -39,7 +37,6 @@ export default function HomePage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const objectId = urlParams.get('objectId');
-    setObjectID(objectId);
 
     if(objectId) {
       console.log('Loading data for object:', objectId);
@@ -63,8 +60,6 @@ export default function HomePage() {
     setIsCompleted(true);
   };
 
-  const coordinates = telemetryToCoordinates(telemetryData);
-
   return (
     <Box 
       sx={{ 
@@ -84,7 +79,6 @@ export default function HomePage() {
             <Stack spacing={3} sx={{ height: '100%' }}>
               <ControlPanel 
                 isPlaying={isPlaying}
-                isPaused={!isPlaying && !isCompleted}
                 isCompleted={isCompleted}
                 onPauseResume={handlePauseResume}
                 onReplay={handleReplay}
@@ -112,7 +106,6 @@ export default function HomePage() {
             }}
           >
             <MapComponent 
-              coordinates={coordinates}
               telemetryData={telemetryData}
               isPlaying={isPlaying}
               restartTrigger={restartTrigger}

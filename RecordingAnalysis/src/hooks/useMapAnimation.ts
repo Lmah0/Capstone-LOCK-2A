@@ -5,22 +5,15 @@ import { TelemetryPoint, Coordinates, RoutePoint, AnimationConfig } from "@/util
 import { calculateBearing, offsetBehind, interpolateCoordinates, calculateDistance } from "@/utils/mapUtils";
 
 interface UseMapAnimationProps {
-  map: React.MutableRefObject<mapboxgl.Map | null>;
-  marker: React.MutableRefObject<mapboxgl.Marker | null>;
+  map: React.RefObject<mapboxgl.Map | null>;
+  marker: React.RefObject<mapboxgl.Marker | null>;
   pathCoordinates: Coordinates[];
-  telemetryData?: TelemetryPoint[];
+  telemetryData: TelemetryPoint[];
   config: AnimationConfig;
   onAnimationEnd?: () => void;
 }
 
-export const useMapAnimation = ({
-  map,
-  marker,
-  pathCoordinates,
-  telemetryData,
-  config,
-  onAnimationEnd,
-}: UseMapAnimationProps) => {
+export const useMapAnimation = ({map, marker, pathCoordinates, telemetryData, config, onAnimationEnd}: UseMapAnimationProps) => {
   const animReq = useRef<number | null>(null);
   const animationState = useRef({
     i: 0,
@@ -203,8 +196,6 @@ export const useMapAnimation = ({
         const end = pathCoordinates[i + 1];
         const progressRatio = progress / config.stepsPerSegment;
         const currentPos = interpolateCoordinates(start, end, progressRatio);
-        
-        const bearing = calculateBearing(start, end);
         const speed = calculateDistance(start, end);
         
         // Get telemetry data for this point if available
@@ -250,13 +241,5 @@ export const useMapAnimation = ({
     progress: animationState.current.i / (pathCoordinates.length - 1),
   }), [pathCoordinates.length]);
 
-  return {
-    runAnimation,
-    stopAnimation,
-    pauseAnimation,
-    resumeAnimation,
-    restartAnimation,
-    skipAnimation,
-    getAnimationStatus,
-  };
+  return {runAnimation, stopAnimation, pauseAnimation, resumeAnimation, restartAnimation, skipAnimation, getAnimationStatus};
 };

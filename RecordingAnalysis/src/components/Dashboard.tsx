@@ -55,9 +55,6 @@ export default function Dashboard() {
             </Typography>
           </Box>
         </Stack>
-
-        {/* Company Info Only - Stats moved to sidebar */}
-        <Box sx={{ flexGrow: 1 }} />
       </Toolbar>
     </AppBar>
   );

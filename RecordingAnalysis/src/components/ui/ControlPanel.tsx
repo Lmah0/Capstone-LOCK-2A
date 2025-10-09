@@ -6,33 +6,21 @@ import { PlayArrow, Pause, Replay, Settings, SkipNext } from "@mui/icons-materia
 interface ControlPanelProps {
   onReplay: () => void;
   onPauseResume: () => void;
-  onSkip?: () => void;
-  isPlaying?: boolean;
-  isAnimating?: boolean;
-  isPaused?: boolean;
-  isCompleted?: boolean;
-  className?: string;
+  onSkip: () => void;
+  isPlaying: boolean;
+  isCompleted: boolean;
 }
 
-export const ControlPanel: React.FC<ControlPanelProps> = ({
-  onReplay,
-  onPauseResume,
-  onSkip,
-  isPlaying = false,
-  isAnimating = false,
-  isPaused = false,
-  isCompleted = false,
-  className = "",
-}) => {
+export const ControlPanel: React.FC<ControlPanelProps> = ({onReplay, onPauseResume, onSkip, isPlaying, isCompleted}) => {
   const getButtonText = () => {
     if (isCompleted) return 'Replay';
-    if (isPlaying || isAnimating) return 'Pause';
+    if (isPlaying) return 'Pause';
     return 'Resume';
   };
 
   const getButtonIcon = () => {
     if (isCompleted) return <PlayArrow />;
-    if (isPlaying || isAnimating) return <Pause />;
+    if (isPlaying) return <Pause />;
     return <PlayArrow />;
   };
 
@@ -120,7 +108,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             </Button>
 
             {/* Skip Animation Button - only show when animation is in progress and not completed */}
-            {(isPlaying || isAnimating) && !isCompleted && onSkip && (
+            {(isPlaying) && !isCompleted && onSkip && (
               <Button
                 variant="outlined"
                 startIcon={<SkipNext />}

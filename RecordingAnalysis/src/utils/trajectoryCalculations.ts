@@ -10,7 +10,6 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[]): Traje
       maxSpeed: 0,
       totalDistance: 0,
       altitudeGain: 0,
-      altitudeLoss: 0,
       minAltitude: 0,
       maxAltitude: 0,
       missionDuration: 0,
@@ -21,7 +20,7 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[]): Traje
     };
   }
 
-  // Extract object class from the first point (assuming consistent throughout mission)
+  // Extract object class from the first point (should be consistent with all points)
   const objectClass = telemetryData[0].object_class || "Unknown";
 
   // Calculate mission duration and times
@@ -39,17 +38,8 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[]): Traje
   const maxAltitude = Math.max(...altitudes);
   const minAltitude = Math.min(...altitudes);
   
-  // Calculate altitude gain and loss more accurately
-  let altitudeGain = 0;
-  let altitudeLoss = 0;
-  for (let i = 1; i < telemetryData.length; i++) {
-    const altDiff = telemetryData[i].altitude - telemetryData[i - 1].altitude;
-    if (altDiff > 0) {
-      altitudeGain += altDiff;
-    } else {
-      altitudeLoss += Math.abs(altDiff);
-    }
-  }
+  // Calculate altitude difference
+  const altitudeGain = telemetryData[telemetryData.length - 1].altitude - telemetryData[0].altitude;
 
   // Calculate total distance using Haversine formula
   let totalDistance = 0;
@@ -64,7 +54,6 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[]): Traje
     maxSpeed: Number(maxSpeed.toFixed(1)),
     totalDistance: Number((totalDistance * 1000).toFixed(1)), // Convert to meters
     altitudeGain: Number(altitudeGain.toFixed(1)),
-    altitudeLoss: Number(altitudeLoss.toFixed(1)),
     minAltitude: Number(minAltitude.toFixed(1)),
     maxAltitude: Number(maxAltitude.toFixed(1)),
     missionDuration: Number(missionDuration.toFixed(0)),

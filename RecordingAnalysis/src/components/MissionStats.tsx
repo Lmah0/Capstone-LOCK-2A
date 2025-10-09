@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
 import { Card, CardContent, Typography, Box, Stack } from '@mui/material';
-import { Speed, Timeline, TrendingUp, Height, AccessTime, Straighten, Category } from '@mui/icons-material';
+import { Speed, Timeline, TrendingUp, TrendingDown, Height, AccessTime, Straighten, Category } from '@mui/icons-material';
 import { formatMissionDuration, formatSpeed, formatAltitude, formatDistance } from '@/utils/trajectoryCalculations';
 import { TrajectoryStats } from '@/utils/types';
 
@@ -70,6 +70,12 @@ export default function MissionStats({ trajectoryStats }: MissionStatsProps) {
       icon: <Timeline sx={{ fontSize: 20, color: '#d32f2f' }} />,
       label: 'Max Altitude',
       value: formatAltitude(trajectoryStats.maxAltitude),
+      color: '#d32f2f'
+    },
+    {
+      icon: <TrendingDown sx={{ fontSize: 20, color: '#d32f2f' }} />,
+      label: 'Min Altitude',
+      value: formatAltitude(trajectoryStats.minAltitude),
       color: '#d32f2f'
     }
   ];
