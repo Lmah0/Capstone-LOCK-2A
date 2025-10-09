@@ -145,7 +145,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                   transition: 'all 0.2s ease'
                 }}
               >
-                Skip to End
+                Skip
               </Button>
             )}
           </Stack>
