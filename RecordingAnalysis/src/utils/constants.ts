@@ -24,5 +24,3 @@ export const DEFAULT_SKY_CONFIG: SkyConfig = {
   sunPosition: [0.0, 0.0],
   sunIntensity: 15,
 };
-
-export const MAPBOX_ACCESS_TOKEN = "pk.eyJ1IjoiZG9tLWdhcnRuZXIiLCJhIjoiY21mZm0ydXYxMGh5cDJscHpqYnI0Nmo4eiJ9.0T79nSFtjWHSwjcG24JcSw";

@@ -117,7 +117,6 @@ export default function HomePage() {
               isPlaying={isPlaying}
               restartTrigger={restartTrigger}
               skipTrigger={skipTrigger}
-              onPauseResume={handlePauseResume}
               onAnimationEnd={handleAnimationEnd}
             />
           </Box>

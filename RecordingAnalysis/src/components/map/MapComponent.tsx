@@ -5,23 +5,21 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { MapPopupContent } from "./MapPopupContent";
 import { useMapAnimation } from "@/hooks/useMapAnimation";
 import { calculateBearing, offsetBehind } from "@/utils/mapUtils";
-import { DEFAULT_MAP_CONFIG, DEFAULT_ANIMATION_CONFIG, DEFAULT_TERRAIN_CONFIG, DEFAULT_SKY_CONFIG,MAPBOX_ACCESS_TOKEN } from "@/utils/constants";
+import { DEFAULT_MAP_CONFIG, DEFAULT_ANIMATION_CONFIG, DEFAULT_TERRAIN_CONFIG, DEFAULT_SKY_CONFIG } from "@/utils/constants";
 import { TelemetryPoint, Coordinates } from "@/utils/types";
 
 interface MapComponentProps {
-  coordinates?: [number, number][];
+  coordinates: Coordinates[];
   telemetryData?: TelemetryPoint[];
   isPlaying?: boolean;
   restartTrigger?: number;
   skipTrigger?: number;
-  onPauseResume?: () => void;
-  pathCoordinates?: Coordinates[];
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
   className?: string;
 }
 
-mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
 export const MapComponent: React.FC<MapComponentProps> = ({
   coordinates,
@@ -29,15 +27,6 @@ export const MapComponent: React.FC<MapComponentProps> = ({
   isPlaying,
   restartTrigger,
   skipTrigger,
-  onPauseResume,
-  pathCoordinates = [
-    [-74.5, 40],
-    [-74.49, 40.01],
-    [-74.48, 40.015],
-    [-74.47, 40.02],
-    [-74.465, 40.025],
-    [-74.46, 40.03],
-  ],
   onAnimationStart,
   onAnimationEnd,
   className = "",
@@ -59,9 +48,6 @@ export const MapComponent: React.FC<MapComponentProps> = ({
   } | null>(null);
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | number | null>(null);
 
-  // Use coordinates prop if provided, otherwise fall back to pathCoordinates
-  const finalCoordinates = coordinates || pathCoordinates;
-
   const {
     runAnimation, 
     stopAnimation, 
@@ -73,7 +59,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
   } = useMapAnimation({
     map,
     marker,
-    pathCoordinates: finalCoordinates,
+    pathCoordinates: coordinates,
     telemetryData,
     config: DEFAULT_ANIMATION_CONFIG,
     onAnimationEnd,
@@ -104,7 +90,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
       setupEventHandlers();
       
       // Position camera at starting location first, then start animation
-      if (isPlaying && finalCoordinates.length > 0) {
+      if (isPlaying && coordinates.length > 0) {
         positionCameraAtStart(() => {
           onAnimationStart?.();
           runAnimation();
@@ -151,7 +137,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
       type: "geojson",
       data: {
         type: "Feature",
-        geometry: { type: "LineString", coordinates: [finalCoordinates[0]] },
+        geometry: { type: "LineString", coordinates: [coordinates[0]] },
         properties: {},
       },
     });
@@ -215,19 +201,18 @@ export const MapComponent: React.FC<MapComponentProps> = ({
       color: "#ef4444",
       scale: 1.2,
     })
-      .setLngLat(finalCoordinates[0])
+      .setLngLat(coordinates[0])
       .addTo(map.current);
   };
 
   const positionCameraAtStart = (callback?: () => void) => {
-    if (!map.current || finalCoordinates.length === 0) return;
+    if (!map.current || coordinates.length === 0) return;
     
-    const startPosition = finalCoordinates[0];
-    const endPosition = finalCoordinates[1] || startPosition;
+    const startPosition = coordinates[0];
+    const endPosition = coordinates[1] || startPosition;
     
     // Calculate initial bearing for camera positioning
-    const bearing = finalCoordinates.length > 1 ? 
-      calculateBearing(startPosition, endPosition) : 0;
+    const bearing = coordinates.length > 1 ? calculateBearing(startPosition, endPosition) : 0;
     
     // Position camera behind the starting point
     const cameraPos = offsetBehind(startPosition, bearing, DEFAULT_ANIMATION_CONFIG.cameraOffset);
@@ -238,7 +223,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
       zoom: 16,
       pitch: 60,
       bearing,
-      duration: 2000, // 2 second transition to starting position
+      duration: 1500,
       easing: (t) => 1 - Math.pow(1 - t, 3), // easeOutCubic for smooth transition
     });
 
@@ -268,13 +253,9 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         telemetryIndex?: number;
       };
 
-      // Get the actual telemetry data using the stored index
-      const telemetryPoint = telemetryData && telemetryIndex !== undefined ? telemetryData[telemetryIndex] : undefined;
-
-      // Clear previous selection using React state
-      if (selectedWaypointId !== null && selectedWaypointId !== undefined) {
+      if (selectedFeatureId !== null && selectedFeatureId !== undefined) {
         map.current!.setFeatureState(
-          { source: "route-points", id: selectedWaypointId } as any,
+          { source: "route-points", id: selectedFeatureId } as any,
           { selected: false }
         );
       }
@@ -282,7 +263,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
       // Set new selection
       const newSelectedId = feature.id as string | number;
       setSelectedWaypointId(newSelectedId);
-      selectedFeatureId = newSelectedId; // Keep local variable in sync
+      selectedFeatureId = newSelectedId;
       if (newSelectedId !== undefined) {
         map.current!.setFeatureState(
           { source: "route-points", id: newSelectedId } as any,
@@ -290,7 +271,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         );
       }
 
-      // Set popup data to show in overlay
+      const telemetryPoint = telemetryData && telemetryIndex !== undefined ? telemetryData[telemetryIndex] : undefined;
       setPopupData({
         coords,
         telemetryPoint,
