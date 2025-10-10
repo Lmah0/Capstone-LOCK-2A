@@ -51,7 +51,7 @@ export default function RecordedObjects() {
 
     const handleObjectClick = (objectId: string) => {
         // CHANGE TO PROPER URL LATER
-        const recordingAnalysisUrl = `http://localhost:3003?objectId=${objectId}`; 
+        const recordingAnalysisUrl = `http://localhost:9876?objectId=${objectId}`; 
         const newWindow = window.open(recordingAnalysisUrl, `recording-analysis-${objectId}`);  
         if (newWindow) {
             newWindow.focus();
@@ -59,10 +59,9 @@ export default function RecordedObjects() {
     };
 
     const getTypeColor = (type: string) => {
-        switch (type) {
-            case 'Vehicle': return '#3b82f6';
-            case 'Person': return '#ef4444';
-            case 'Unknown': return '#6b7280';
+        switch (type.toLowerCase()) {
+            case 'vehicle': return '#3b82f6';
+            case 'person': return '#ef4444';
             default: return '#6b7280';
         }
     };
