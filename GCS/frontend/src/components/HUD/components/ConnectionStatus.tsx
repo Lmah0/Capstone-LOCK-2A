@@ -1,16 +1,21 @@
 "use client";
+import { useEffect } from "react";
 import ErrorIcon from '@mui/icons-material/Error';
 import Tooltip from '@mui/material/Tooltip';
+import { useWebSocket } from "@/providers/WebSocketProvider";
 
-interface ConnectionStatusProps {
-    isConnected: boolean;
-}
+export default function ConnectionStatus() {
+    const { droneConnection, connectionStatus, subscribe } = useWebSocket();
 
-export default function ConnectionStatus({ isConnected }: ConnectionStatusProps) {
+    useEffect(() => {
+        if(connectionStatus === 'connected') {
+          subscribe(['connection']);
+        }
+    }, [connectionStatus]);
 
     return (
         <div>
-            {isConnected ? (
+            {droneConnection ? (
                 <>
                 </>
             ) : (

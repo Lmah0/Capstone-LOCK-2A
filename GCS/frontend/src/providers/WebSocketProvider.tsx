@@ -1,9 +1,13 @@
 'use client';
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 
 interface WebSocketContextType {
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
   sendMessage: (message: string) => void;
+  subscribe: (dataTypes: string[]) => void;
+  telemetryData: any;
+  batteryData: any;
+  droneConnection: boolean;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -22,6 +26,9 @@ interface WebSocketProviderProps {
 
 export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
+  const [telemetryData, setTelemetryData] = useState<any>(null);
+  const [batteryData, setBatteryData] = useState<any>(null);
+  const [droneConnection, setDroneConnection] = useState<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
@@ -35,25 +42,44 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     // Stop trying after max attempts
     if (reconnectAttempts.current >= maxReconnectAttempts) {
-      console.log('❌ Max reconnection attempts reached');
+      console.log('Max reconnection attempts reached');
       setConnectionStatus('error');
       return;
     }
 
     setConnectionStatus('connecting');
-    console.log(`🔌 Connecting... (attempt ${reconnectAttempts.current + 1})`);
+    console.log(`Connecting... (attempt ${reconnectAttempts.current + 1})`);
     
     const websocket = new WebSocket('ws://localhost:8766/ws/gcs');
     wsRef.current = websocket;
 
     websocket.onopen = () => {
-      console.log('✅ Connected to backend');
       setConnectionStatus('connected');
       reconnectAttempts.current = 0;
     };
 
     websocket.onmessage = (event) => {
-      // Do something
+      try {
+        const data = JSON.parse(event.data);    
+        switch (data.type) {
+          case 'telemetry':
+            setTelemetryData(data);
+            break;
+          case 'battery':
+            setBatteryData(data);
+            break;
+          case 'connection':
+            setDroneConnection(data.connected);
+            break;
+          case 'subscription_confirmed':
+            console.log('Subscribed to:', data.dataTypes);
+            break;
+          default:
+            console.log('Unknown message type:', data.type);
+        }
+      } catch (error) {
+        console.log('Received text:', event.data);
+      }
     };
 
     websocket.onclose = () => {
@@ -82,6 +108,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     }
   };
 
+  const subscribe = useCallback((dataTypes: string[]) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const subscriptionMessage = {
+        type: 'subscribe',
+        dataTypes: dataTypes
+      };
+      wsRef.current.send(JSON.stringify(subscriptionMessage));
+      console.log('Subscribing to:', dataTypes);
+    }
+  }, []);
+
   useEffect(() => {
     connect(); 
     return () => {
@@ -96,7 +133,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     };
   }, []);
 
-  const value: WebSocketContextType = { connectionStatus, sendMessage };
+  const value: WebSocketContextType = { connectionStatus, sendMessage, subscribe, telemetryData, batteryData, droneConnection };
 
   return (
     <WebSocketContext.Provider value={value}>

@@ -1,16 +1,27 @@
 "use client";
+import { useEffect } from 'react';
 import { Box, Typography, Paper, IconButton, Tooltip } from '@mui/material';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import { formatUnits } from "../../../utils/unitConversions";
-import { telemetryConfig, telemetryData } from "../../../utils/telemetryConfig";
+import { telemetryConfig } from "../../../utils/telemetryConfig";
+import { useWebSocket } from "@/providers/WebSocketProvider";
+
 
 interface FlightDataProps {
     pinnedTelemetry: string[];
     setPinnedTelemetry: React.Dispatch<React.SetStateAction<string[]>>;
-    isMetric?: boolean;
+    isMetric: boolean;
 }
 
-export default function FlightData({ pinnedTelemetry, setPinnedTelemetry, isMetric = true }: FlightDataProps) {
+export default function FlightData({ pinnedTelemetry, setPinnedTelemetry, isMetric }: FlightDataProps) {
+    const { telemetryData, connectionStatus, subscribe } = useWebSocket();
+    
+    useEffect(() => {
+        if(connectionStatus === 'connected') {
+            subscribe(['telemetry']);
+        }
+    }, [connectionStatus]);
+
     const handlePinToggle = (telemetryKey: string) => {
         if(pinnedTelemetry.includes(telemetryKey)) {
             // Remove from pinned
@@ -38,7 +49,7 @@ export default function FlightData({ pinnedTelemetry, setPinnedTelemetry, isMetr
         // Use universal formatter for all telemetry types
         const formatted = telemetryKey && rawValue !== undefined 
             ? formatUnits.formatTelemetry(rawValue, telemetryKey, isMetric)
-            : { value: value.toFixed(2), unit: unit };
+            : { value: (value ?? 0).toFixed(2), unit: unit };
         
         return (
             <Paper
@@ -94,25 +105,39 @@ export default function FlightData({ pinnedTelemetry, setPinnedTelemetry, isMetr
     };
 
     return (
-        <div className="w-full h-full p-4">        
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {Object.entries(telemetryConfig).map(([key, config]) => {
-                    const IconComponent = config.icon;
-                    const rawValue = telemetryData[key as keyof typeof telemetryData];           
-                    return (
-                        <DataCard
-                            key={key}
-                            title={config.label}
-                            value={rawValue}
-                            unit="" // Unit will be determined by formatTelemetry
-                            icon={<IconComponent style={config.iconStyle} />}
-                            color={config.color || 'white'}
-                            telemetryKey={key}
-                            rawValue={rawValue}
-                        />
-                    );
-                })}
-            </div>
+        <div className="w-full h-full p-4">
+            {!telemetryData ? (
+                <Box 
+                    sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center', 
+                        height: '200px',
+                        color: 'rgba(255,255,255,0.7)'
+                    }}
+                >
+                    <Typography variant="h6">Loading telemetry data...</Typography>
+                </Box>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {Object.entries(telemetryConfig).map(([key, config]) => {
+                        const IconComponent = config.icon;
+                        const rawValue = telemetryData?.[key as keyof typeof telemetryData] ?? 0;           
+                        return (
+                            <DataCard
+                                key={key}
+                                title={config.label}
+                                value={rawValue}
+                                unit="" // Unit will be determined by formatTelemetry
+                                icon={<IconComponent style={config.iconStyle} />}
+                                color={config.color || 'white'}
+                                telemetryKey={key}
+                                rawValue={rawValue}
+                            />
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }

@@ -26,7 +26,7 @@ export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isM
             <ServerConnection />
         </div>
         <div className="absolute top-10 left-4 z-10">
-            <ConnectionStatus isConnected={false} />
+            <ConnectionStatus />
         </div>
             {isRecording && (
                 <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex items-center space-x-1 px-2 py-1">
