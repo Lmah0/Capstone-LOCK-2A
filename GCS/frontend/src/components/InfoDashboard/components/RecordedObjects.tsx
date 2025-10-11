@@ -50,7 +50,6 @@ export default function RecordedObjects() {
     ];
 
     const handleObjectClick = (objectId: string) => {
-        // CHANGE TO PROPER URL LATER
         const recordingAnalysisUrl = `http://localhost:9876?objectId=${objectId}`; 
         const newWindow = window.open(recordingAnalysisUrl, `recording-analysis-${objectId}`);  
         if (newWindow) {
