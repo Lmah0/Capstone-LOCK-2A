@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Auto-Start Configuration
 
-## Getting Started
+## Quick Start (Recommended)
 
-First, run the development server:
-
+### Start Both Applications (Default)
 ```bash
+cd GCS/frontend
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+This starts both GCS (port 8765) and RecordingAnalysis (port 9876) with colored output.
+
+### Start Only GCS
+```bash
+cd GCS/frontend
+npm run dev:gcs-only
+```
+This starts only the GCS application on port 8765.
+
+## Individual Application Start
+
+### Start only RecordingAnalysis
+```bash
+cd RecordingAnalysis
+npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Application URLs
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **GCS Frontend**: http://localhost:8765
+- **RecordingAnalysis**: http://localhost:9876
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup Instructions
 
-## Learn More
+1. **Install dependencies for GCS:**
+   ```bash
+   cd GCS/frontend
+   npm install
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Install dependencies for RecordingAnalysis:**
+   ```bash
+   cd RecordingAnalysis
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Available Commands
+From `GCS/frontend` directory:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `npm run dev` - **Start both GCS and RecordingAnalysis** (default)
+- `npm run dev:gcs-only` - Start only GCS
+- `npm run build` - Build GCS for production
+- `npm run start` - Start GCS in production mode
+- `npm run lint` - Run ESLint
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The applications will start with colored output:
+- 🔵 **Blue**: GCS Frontend logs  
+- 🟢 **Green**: RecordingAnalysis logs
