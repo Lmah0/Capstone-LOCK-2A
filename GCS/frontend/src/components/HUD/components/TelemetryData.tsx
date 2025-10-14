@@ -1,5 +1,4 @@
 "use client";
-import { useEffect } from "react";
 import { Box, Paper, Typography, Tooltip } from "@mui/material";
 import { formatUnits } from "../../../utils/unitConversions";
 import { telemetryConfig, isValidTelemetryKey} from "../../../utils/telemetryConfig";
@@ -11,13 +10,7 @@ interface TelemetryDataProps {
 }
 
 export default function TelemetryData({ pinnedTelemetry, isMetric }: TelemetryDataProps) {
-  const { telemetryData, connectionStatus, subscribe } = useWebSocket();
-
-  useEffect(() => {
-    if(connectionStatus === 'connected') {
-      subscribe(['telemetry']);
-    }
-  }, [connectionStatus]);
+  const { telemetryData } = useWebSocket();
 
   if (!telemetryData) {
     return (

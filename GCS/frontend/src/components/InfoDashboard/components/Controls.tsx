@@ -15,7 +15,7 @@ interface ControlsProps {
     showHUDElements: boolean;
     setShowHUDElements: React.Dispatch<React.SetStateAction<boolean>>;
     isRecording: boolean;
-    setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
+    setRecording: React.Dispatch<React.SetStateAction<boolean>>;
     isMetric: boolean;
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
     followDistance: number;
@@ -26,7 +26,7 @@ interface ControlsProps {
     setIsFollowing?: React.Dispatch<React.SetStateAction<boolean>>; // TODO: REMOVE WHEN BACKEND HOOKED UP
 }
 
-export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance, flightMode, setFlightMode, isFollowing, setIsFollowing }: ControlsProps) {
+export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setRecording, isMetric, setIsMetric, followDistance, setFollowDistance, flightMode, setFlightMode, isFollowing, setIsFollowing }: ControlsProps) {
     const [inputValue, setInputValue] = useState('');
     const { sendMessage, connectionStatus } = useWebSocket();
 
@@ -51,7 +51,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     };
     const handleRecordingToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         const newRecording = event.target.checked;
-        setIsRecording(newRecording);
+        setRecording(newRecording);
     };
     const handleMetricToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         setIsMetric(event.target.value === 'metric');
@@ -68,25 +68,20 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
             const distanceInMeters = isMetric ? value : value / convertDistance.metersToFeet(1);
             setFollowDistance(distanceInMeters);
             sendControlCommand("set_follow_distance", { 
-                distance: distanceInMeters,
-                unit: 'meters'
+                distance: distanceInMeters
             });
         }
     };
 
     const handleFlightModeChange = (event: any) => {
         const newFlightMode = event.target.value;
-        setFlightMode(newFlightMode);
-        
+        setFlightMode(newFlightMode)    
         // Send flight mode command to backend
-        sendControlCommand("set_flight_mode", { 
-            mode: newFlightMode 
-        });
+        sendControlCommand("set_flight_mode", { mode: newFlightMode  });
     };
 
     const handleStopFollowing = () => {
-        // setIsFollowing(false);
-        
+        // setIsFollowing(false);     
         // Send stop following command to backend
         sendControlCommand("stop_following", {});
     };

@@ -1,13 +1,14 @@
 'use client';
-import { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 
 interface WebSocketContextType {
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
   sendMessage: (message: string) => void;
-  subscribe: (dataTypes: string[]) => void;
   telemetryData: any;
   batteryData: any;
   droneConnection: boolean;
+  setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
+  isRecording: boolean;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -29,10 +30,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [telemetryData, setTelemetryData] = useState<any>(null);
   const [batteryData, setBatteryData] = useState<any>(null);
   const [droneConnection, setDroneConnection] = useState<boolean>(false);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const isRecordingRef = useRef<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
 
   const connect = () => {
     // Don't try to connect if already connecting or connected
@@ -64,6 +71,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         switch (data.type) {
           case 'telemetry':
             setTelemetryData(data);
+            if (isRecordingRef.current) {
+                sendMessage(JSON.stringify({ type: "record", data: data }));
+            }
             break;
           case 'battery':
             setBatteryData(data);
@@ -71,11 +81,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           case 'connection':
             setDroneConnection(data.connected);
             break;
-          case 'subscription_confirmed':
-            console.log('Subscribed to:', data.dataTypes);
-            break;
-          default:
-            console.log('Unknown message type:', data.type);
         }
       } catch (error) {
         console.log('Received text:', event.data);
@@ -83,13 +88,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     };
 
     websocket.onclose = () => {
-      console.log('🔌 Disconnected');
+      console.log('Disconnected');
       setConnectionStatus('disconnected');
       
       // Try to reconnect after 1 second
       if (reconnectAttempts.current < maxReconnectAttempts) {
         reconnectAttempts.current++;
-        console.log(`🔄 Attempting Reconnect... (${reconnectAttempts.current}/${maxReconnectAttempts})`);
+        console.log(`Attempting Reconnect... (${reconnectAttempts.current}/${maxReconnectAttempts})`);
         
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
@@ -108,17 +113,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     }
   };
 
-  const subscribe = useCallback((dataTypes: string[]) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const subscriptionMessage = {
-        type: 'subscribe',
-        dataTypes: dataTypes
-      };
-      wsRef.current.send(JSON.stringify(subscriptionMessage));
-      console.log('Subscribing to:', dataTypes);
-    }
-  }, []);
-
   useEffect(() => {
     connect(); 
     return () => {
@@ -133,7 +127,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     };
   }, []);
 
-  const value: WebSocketContextType = { connectionStatus, sendMessage, subscribe, telemetryData, batteryData, droneConnection };
+  const value: WebSocketContextType = { 
+    connectionStatus, 
+    sendMessage,
+    telemetryData, 
+    batteryData, 
+    droneConnection,
+    setIsRecording,
+    isRecording
+  };
 
   return (
     <WebSocketContext.Provider value={value}>

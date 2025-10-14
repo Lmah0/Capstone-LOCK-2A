@@ -1,18 +1,11 @@
 "use client";
-import { useEffect } from "react";
 import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import Tooltip from '@mui/material/Tooltip';
 import { useWebSocket } from "@/providers/WebSocketProvider";
 
 export default function BatteryGauge() {
-  const { batteryData, connectionStatus, subscribe } = useWebSocket();
-
-  useEffect(() => {
-    if(connectionStatus === 'connected') {
-      subscribe(['battery']);
-    }
-  }, [connectionStatus]);
+  const { batteryData } = useWebSocket();
 
   return (
     <Tooltip 

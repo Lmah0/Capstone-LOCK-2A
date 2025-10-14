@@ -1,12 +1,12 @@
 "use client";
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Tabs, Tab, Box } from '@mui/material';
 import FlightData from './components/FlightData';
 import Controls from './components/Controls';
 import RecordedObjects from './components/RecordedObjects';
 
 interface TabPanelProps {
-    children?: React.ReactNode;
+    children: React.ReactNode;
     index: number;
     value: number;
 }
@@ -48,7 +48,7 @@ interface InfoDashBoardProps {
     showHUDElements: boolean;
     setShowHUDElements: React.Dispatch<React.SetStateAction<boolean>>;
     isRecording: boolean;
-    setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
+    setRecording: React.Dispatch<React.SetStateAction<boolean>>;
     isMetric: boolean;
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
     pinnedTelemetry: string[];
@@ -59,7 +59,7 @@ interface InfoDashBoardProps {
     setFlightMode: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -130,7 +130,7 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                             showHUDElements={showHUDElements} 
                             setShowHUDElements={setShowHUDElements} 
                             isRecording={isRecording}
-                            setIsRecording={setIsRecording}
+                            setRecording={setRecording}
                             isMetric={isMetric}
                             setIsMetric={setIsMetric}
                             followDistance={followDistance}
