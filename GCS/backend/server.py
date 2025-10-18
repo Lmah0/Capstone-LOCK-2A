@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
@@ -6,6 +6,18 @@ import json
 import random
 from contextlib import asynccontextmanager
 from typing import List
+import boto3
+import os
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path="../../.env")
+dynamodb = boto3.resource(
+    'dynamodb',
+    region_name=os.getenv('AWS_REGION'),
+    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
+)
+table = dynamodb.Table(os.getenv('DYNAMODB_TABLE_NAME'))
 
 active_connections: List[WebSocket] = []
 flight_mode = ""
@@ -26,11 +38,41 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8765"],
+    allow_origins=[f"http://localhost:{os.getenv('GCS_FRONTEND_PORT')}"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/objects")
+async def get_all_objects():
+    response = table.scan()
+    items = response.get('Items', [])
+    object_list = []
+    for item in items:
+        # Get the first timestamp from positions array
+        first_timestamp = None
+        positions = item.get('positions', [])
+        if positions and len(positions) > 0:
+            first_timestamp = positions[0].get('ts')
+        
+        object_data = {
+            "objectID": item['objectID'], 
+            "classification": item['class'],
+            "timestamp": first_timestamp
+        }
+        object_list.append(object_data)
+    
+    return object_list
+
+@app.delete("/object/{object_id}")
+async def delete_object(object_id: str):
+    try:
+        table.delete_item(Key={'objectID': object_id})
+        return {"status": 200}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete object: {str(e)}")
+
 
 async def send_data_to_connections(message: dict):
     """Send message to all connected WebSocket clients"""
@@ -55,10 +97,6 @@ async def handleControlCommmand(message):
         setFlightMode(data.get("mode"))       
     elif command == "set_follow_distance":
         setFollowDistance(data.get("distance"))
-
-def handleDataRecording(data):
-    print(f"Recording data point: {data}")
-    # Save data to database
 
 async def send_telemetry_data():
     """Background task that sends data"""
@@ -105,7 +143,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     await handleControlCommmand(message)
                 elif message.get("type") == "record":
                     record_data = message.get("data", {})
-                    handleDataRecording(record_data)                
+                    table.put_item(Item=record_data)               
             except json.JSONDecodeError:
                 pass
             
@@ -116,4 +154,4 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8766, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
