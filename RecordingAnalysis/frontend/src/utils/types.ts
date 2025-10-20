@@ -1,6 +1,4 @@
 export interface TelemetryPoint {
-  object_id?: number; // ID of the tracked object
-  object_class?: string; // Class of the tracked object
   timestamp: string; // ISO timestamp string
   latitude: number;
   longitude: number;

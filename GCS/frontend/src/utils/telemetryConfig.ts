@@ -6,18 +6,6 @@ import ExploreIcon from "@mui/icons-material/Explore";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
 import { SvgIconComponent } from "@mui/icons-material";
 
-// Mock telemetry data (in base units - meters/second, meters, degrees)
-export const telemetryData = {
-    speed: 12.5, // m/s
-    altitude: 150, // meters
-    latitude: 40.712800, // degrees
-    longitude: -74.006000, // degrees
-    bearing: 245.0, // degrees
-    roll: -2.1, // degrees
-    pitch: 1.3, // degrees
-    yaw: 245.7, // degrees
-  }; 
-
 export interface TelemetryItem {
   icon: SvgIconComponent;
   label: string;

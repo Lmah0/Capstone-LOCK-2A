@@ -1,5 +1,6 @@
 import ConnectionStatus from './components/ConnectionStatus';
-import Battery from './components/Battery';
+import ServerConnection from './components/ServerConnection';
+import BatteryGuage from './components/Battery';
 import VideoFeed from './components/VideoFeed';
 import TelemetryData from './components/TelemetryData';
 import Heading from './components/Heading';
@@ -21,8 +22,11 @@ export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isM
         <div className="w-full h-full relative">
             <VideoFeed />
             
-        <div className="absolute top-4 left-4 z-10">
-            <ConnectionStatus isConnected={false} />
+        <div className="absolute top-4 left-4 z-50">
+            <ServerConnection />
+        </div>
+        <div className="absolute top-10 left-4 z-10">
+            <ConnectionStatus />
         </div>
             {isRecording && (
                 <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex items-center space-x-1 px-2 py-1">
@@ -46,7 +50,7 @@ export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isM
                     <FlightMode isMetric={isMetric} followDistance={followDistance} flightMode={flightMode} />
                 </div>
                 <div className="absolute top-4 right-4 z-10">
-                    <Battery />
+                    <BatteryGuage />
                 </div>
             </>
         )}
