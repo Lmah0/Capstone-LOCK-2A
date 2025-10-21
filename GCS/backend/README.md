@@ -1,3 +1,5 @@
 # Backend for GCS
-- `benchmarkVideoStream.py` - Python file containing functions to benchmark receiving video stream.
-- `receiveVideoStream.py` - Python file used for receiving a video stream over UDP. Run the file with the `bench` flag to benchmark receiving video.# Backend for GCS
+
+## videoStreaming
+- `receiveVideoStream.py` - Python file used for receiving a video stream over UDP. Also, provides the ability to benchmark FFMPEG and video quality of the stream.
+- `benchmarkVideoStream.py` - Python file containing helper functions to benchmark FFMPEG stream and video quality.
