@@ -1,2 +1,4 @@
-# Drone side codeSSSS
-- `SendVideoStream.py` - Python file to send video over UDP to the GCS using FFMPEG. Run the file with `bench` flag to benchmark videostreaming. # Drone side codeS
+# Drone side code
+## videoStreaming
+- `SendVideoStream.py` - Python file to send video over UDP to the GCS using FFMPEG. Also provides the ability to benchmark FFMPEG and the quality of video.
+- `benchmarkSendingVideoStream.py` - Python file containing helper functions to benchmark FFMPEG stream and video quality.
