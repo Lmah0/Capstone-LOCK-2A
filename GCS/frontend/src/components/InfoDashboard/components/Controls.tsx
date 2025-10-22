@@ -33,7 +33,6 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     const sendControlCommand = (command: string, data: any) => {
         if (connectionStatus === 'connected') {
             const message = {
-                type: "control",
                 command: command,
                 data: data
             };

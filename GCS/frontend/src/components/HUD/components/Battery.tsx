@@ -25,7 +25,7 @@ export default function BatteryGauge() {
             pathColor: (batteryData?.usage || 0) > 70 ? "red" : (batteryData?.usage || 0) > 30 ? "orange" : "limegreen",
             textColor: "white",
           })}
-          text={`${batteryData?.percentage || 0}%`}
+          text={`${(batteryData?.percentage || 0).toFixed(1)}%`}
         />
         </div>
       </div>

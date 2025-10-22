@@ -6,22 +6,19 @@ import json
 import random
 from contextlib import asynccontextmanager
 from typing import List
-import boto3
 import os
+from websocket_commands import setup_command_registry
+from database import get_all_objects, delete_object as db_delete_object
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path="../../.env")
-dynamodb = boto3.resource(
-    'dynamodb',
-    region_name=os.getenv('AWS_REGION'),
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-)
-table = dynamodb.Table(os.getenv('DYNAMODB_TABLE_NAME'))
 
 active_connections: List[WebSocket] = []
 flight_mode = ""
 follow_distance = 10  # meters
+
+# Initialize command registry
+command_registry = setup_command_registry()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,31 +42,22 @@ app.add_middleware(
 )
 
 @app.get("/objects")
-async def get_all_objects():
-    response = table.scan()
-    items = response.get('Items', [])
-    object_list = []
-    for item in items:
-        # Get the first timestamp from positions array
-        first_timestamp = None
-        positions = item.get('positions', [])
-        if positions and len(positions) > 0:
-            first_timestamp = positions[0].get('ts')
-        
-        object_data = {
-            "objectID": item['objectID'], 
-            "classification": item['class'],
-            "timestamp": first_timestamp
-        }
-        object_list.append(object_data)
-    
-    return object_list
+async def get_all_objects_endpoint():
+    """Retrieve a list of all recorded objects with their classifications and timestamps"""
+    try:
+        return get_all_objects()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve objects: {str(e)}")
 
 @app.delete("/object/{object_id}")
-async def delete_object(object_id: str):
+async def delete_object_endpoint(object_id: str):
+    """Delete a recorded object from the DynamoDB table by its ID"""
     try:
-        table.delete_item(Key={'objectID': object_id})
-        return {"status": 200}
+        success = db_delete_object(object_id)
+        if success:
+            return {"status": 200}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete object")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete object: {str(e)}")
 
@@ -83,21 +71,6 @@ async def send_data_to_connections(message: dict):
             if websocket in active_connections:
                 active_connections.remove(websocket)
 
-def setFlightMode(mode):
-    print(f"Setting flight mode to: {mode}")
-
-def setFollowDistance(distance):
-    print(f"Setting follow distance to: {distance} meters")
-
-async def handleControlCommmand(message):
-    command = message.get("command")
-    data = message.get("data", {})
-
-    if command == "set_flight_mode":
-        setFlightMode(data.get("mode"))       
-    elif command == "set_follow_distance":
-        setFollowDistance(data.get("distance"))
-
 async def send_telemetry_data():
     """Background task that sends data"""
     while True:
@@ -105,50 +78,39 @@ async def send_telemetry_data():
             "type": "telemetry",
             "latitude": random.uniform(40.7123, 60.7133),
             "longitude": random.uniform(-74.0065, -60.0055),
-            "heading": random.randint(0, 360),
             "altitude": random.uniform(145.0, 155.0),
             "speed": random.uniform(20.0, 30.0),
-            "bearing": random.randint(0, 360),
+            "heading": random.randint(0, 360),
             "roll": random.uniform(-5.0, 5.0),
             "pitch": random.uniform(-5.0, 5.0),
-            "yaw": random.uniform(-5.0, 5.0)
+            "yaw": random.uniform(-5.0, 5.0),
+            "battery_remaining": random.uniform(30.0, 100.0),
+            "battery_voltage": random.uniform(10.1, 80.6)
+
         }
         await send_data_to_connections(basic_telemetry)
-    
-        battery_data = {
-            "type": "battery",
-            "percentage": max(0, 100 - (random.randint(0, 10))),
-            "usage": 100 - random.randint(5, 85)
-        }
-        await send_data_to_connections(battery_data)
-
-        connection_data = {
-            "type": "connection",
-            "connected": True
-        }
-        await send_data_to_connections(connection_data)    
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()   # Accept the connection
-    active_connections.append(websocket)  
+    """WebSocket endpoint for GCS frontend to send commands and receive telemetry"""
+    await websocket.accept()
+    active_connections.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
-            print(f"Received: {data}")       
-            try:
-                message = json.loads(data)
-                if message.get("type") == "control":
-                    await handleControlCommmand(message)
-                elif message.get("type") == "record":
-                    record_data = message.get("data", {})
-                    table.put_item(Item=record_data)               
-            except json.JSONDecodeError:
-                pass
-            
+            data = await websocket.receive_text()      
+            response = await command_registry.handle_message(data, websocket)     
+            if response:
+                await websocket.send_text(json.dumps(response))
+                
     except WebSocketDisconnect:
         print(f"Client disconnected.")
+    except Exception as e:
+        error_response = {"error": str(e), "status": "error"}
+        try:
+            await websocket.send_text(json.dumps(error_response))
+        except:
+            pass
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)

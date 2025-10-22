@@ -6,6 +6,17 @@ import ExploreIcon from "@mui/icons-material/Explore";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
 import { SvgIconComponent } from "@mui/icons-material";
 
+export interface TelemetryData {
+  speed: number;
+  altitude: number;
+  latitude: number;
+  longitude: number;
+  heading: number;
+  roll: number;
+  pitch: number;
+  yaw: number;
+}
+
 export interface TelemetryItem {
   icon: SvgIconComponent;
   label: string;
@@ -39,10 +50,10 @@ export const telemetryConfig: Record<string, TelemetryItem> = {
     tooltip: "Current longitude position",
     color: "#f56f50"
   },
-  bearing: {
+  heading: {
     icon: ExploreIcon,
-    label: "Bearing",
-    tooltip: "Current bearing/orientation",
+    label: "Heading",
+    tooltip: "Current heading/orientation",
     color: "#8b5cf6"
   },
   roll: {
