@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 import os
 
-# Change to the LOCK-2A directory so relative paths in data.yaml work correctly
+# Change to path where the training data is located
 os.chdir("/Users/lionelhasan/Capstone/LOCK-2A")
 
 # Initialize YOLOv11 model
@@ -17,7 +17,7 @@ results = model.train(
     project='runs/detect',
     patience=50,
     save=True,
-    device='mps',
+    device='mps', # Use 'cuda' for GPU or 'mps' for Mac
     verbose=True,
     plots=True,
 )
@@ -35,6 +35,3 @@ print(f"mAP50-95: {metrics.box.map}")
 # Print results summary
 print(f"\nResults saved to: runs/detect/yolo11_training")
 print(f"Check training plots at: runs/detect/yolo11_training/")
-
-# Export the model (optional)
-# model.export(format='onnx')
