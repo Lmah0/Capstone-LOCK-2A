@@ -3,7 +3,7 @@ import { TelemetryPoint, TrajectoryStats } from "@/utils/types";
 /**
  * Calculates trajectory statistics from telemetry data points
  */
-export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[]): TrajectoryStats => {
+export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[], objClass: string): TrajectoryStats => {
   if (telemetryData.length === 0) {
     return {
       averageSpeed: 0,
@@ -19,9 +19,6 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[]): Traje
       objectClass: "Unknown"
     };
   }
-
-  // Extract object class from the first point (should be consistent with all points)
-  const objectClass = telemetryData[0].object_class || "Unknown";
 
   // Calculate mission duration and times
   const startTime = new Date(telemetryData[0].timestamp);
@@ -60,7 +57,7 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[]): Traje
     totalPoints: telemetryData.length,
     startTime: telemetryData[0].timestamp,
     endTime: telemetryData[telemetryData.length - 1].timestamp,
-    objectClass: objectClass
+    objectClass: objClass
   };
 };
 

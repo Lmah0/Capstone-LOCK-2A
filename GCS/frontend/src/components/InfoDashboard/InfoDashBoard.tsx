@@ -1,12 +1,12 @@
 "use client";
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Tabs, Tab, Box } from '@mui/material';
 import FlightData from './components/FlightData';
 import Controls from './components/Controls';
 import RecordedObjects from './components/RecordedObjects';
 
 interface TabPanelProps {
-    children?: React.ReactNode;
+    children: React.ReactNode;
     index: number;
     value: number;
 }

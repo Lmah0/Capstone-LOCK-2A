@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "concurrently --names \"GCS,RecordingAnalysis\" --prefix-colors \"blue,green\" \"npm run dev:gcs-only\" \"npm run start:recording-analysis\"",
     "dev:gcs-only": "next dev --turbopack -p 8765",
-    "start:recording-analysis": "cd ../../RecordingAnalysis && npm run dev -- -p 9876",
+    "start:recording-analysis": "cd ../../RecordingAnalysis/frontend && npm run dev -- -p 9876",
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint"
@@ -15,6 +15,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
+    "axios": "^1.12.2",
     "next": "15.5.3",
     "react": "19.1.0",
     "react-circular-progressbar": "^2.2.0",

@@ -2,11 +2,12 @@
 import { useState, useEffect } from 'react';
 import HUD from '../components/HUD/HUD';
 import InfoDashBoard from '../components/InfoDashboard/InfoDashBoard';
+import { useWebSocket } from '@/providers/WebSocketProvider';
 
 export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHUDElements, setShowHUDElements] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
+  const { isRecording, setIsRecording } = useWebSocket();
   const [isMetric, setIsMetric] = useState(true);
   const [pinnedTelemetry, setPinnedTelemetry] = useState<string[]>(['speed', 'altitude', 'latitude', 'longitude']);
   const [followDistance, setFollowDistance] = useState(20.0);
