@@ -4,13 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import json
-import random
+import websockets
 from contextlib import asynccontextmanager
 from typing import List
 import os
 from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
-import datetime
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -114,23 +113,23 @@ async def send_data_to_connections(message: dict):
 
 async def send_telemetry_data():
     """Background task that sends data"""
+    flight_comp_url = os.getenv('FLIGHT_COMP_URL')
     while True:
-        basic_telemetry = {
-            "timestamp": datetime.datetime.now().timestamp(),
-            "latitude": random.uniform(40.7123, 60.7133),
-            "longitude": random.uniform(-74.0065, -60.0055),
-            "altitude": random.uniform(145.0, 155.0),
-            "speed": random.uniform(20.0, 30.0),
-            "heading": random.randint(0, 360),
-            "roll": random.uniform(-5.0, 5.0),
-            "pitch": random.uniform(-5.0, 5.0),
-            "yaw": random.uniform(-5.0, 5.0),
-            "battery_remaining": random.uniform(30.0, 100.0),
-            "battery_voltage": random.uniform(10.1, 80.6)
-
-        }
-        await send_data_to_connections(basic_telemetry)
-        await asyncio.sleep(1)
+        try:
+            async with websockets.connect(flight_comp_url) as ws:
+                print("Connected to flight computer")
+                async for msg in ws:
+                    try:
+                        data = json.loads(msg)
+                        await send_data_to_connections(data)
+                    except json.JSONDecodeError:
+                        continue
+        except websockets.exceptions.ConnectionClosedError as e:
+            print(f"Lost flight computer connection: {e}, retrying in 5s")
+            await asyncio.sleep(5)
+        except Exception as e:
+            print(f"Error occured: {e}, retrying in 5s")
+            await asyncio.sleep(5)
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):

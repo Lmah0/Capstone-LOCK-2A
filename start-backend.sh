@@ -18,6 +18,7 @@ if [ $# -eq 0 ]; then
     echo "Examples:"
     echo "  $0 gcs        # Start GCS backend"
     echo "  $0 recording  # Start RecordingAnalysis backend"
+    echo "  $0 rpi       # Start RPi backend"
     exit 1
 fi
 
@@ -35,6 +36,11 @@ case "$1" in
         echo "Starting RecordingAnalysis Backend..."
         cd "$PROJECT_ROOT/RecordingAnalysis/backend"
         python query.py
+        ;;
+    "rpi")
+        echo "Starting RPi Backend..."
+        cd "$PROJECT_ROOT/Drone/flightComputer"
+        python server.py
         ;;
     *)
         echo "Invalid option: $1"
