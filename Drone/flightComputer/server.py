@@ -61,10 +61,25 @@ async def send_telemetry_data():
             "yaw": random.uniform(-5.0, 5.0),
             "battery_remaining": random.uniform(30.0, 100.0),
             "battery_voltage": random.uniform(10.1, 80.6)
-
         }
         await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
+
+def setFlightMode(mode: str):
+    """Set the flight mode of the drone"""
+    if not mode:
+        raise ValueError("Flight mode cannot be empty")
+    print(f"Setting flight mode to: {mode}")
+
+def setFollowDistance(distance: float):
+    """Set the follow distance of the drone"""
+    if not distance or distance <= 0:
+        raise ValueError("Follow distance must be a positive number")
+    print(f"Setting follow distance to: {distance} meters")
+
+def stopFollowingTarget():
+    """Stop following the target"""
+    print("Stopping following the target")
 
 @app.websocket("/ws/flight-computer")
 async def websocket_endpoint(websocket: WebSocket):
@@ -73,7 +88,19 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()                  
+            data = await websocket.receive_text()    
+            msg = json.loads(data)
+            cmd = msg.get("command")
+            # Handle commands
+            if cmd == "set_flight_mode":
+                setFlightMode(msg.get("mode"))
+            elif cmd == "set_follow_distance":
+                setFollowDistance(msg.get("distance"))
+            elif cmd == "stop_following":
+                stopFollowingTarget()
+            else:
+                raise HTTPException(status_code=400, detail="Unknown command")
+
     except WebSocketDisconnect:
         print(f"Client disconnected.")
     except Exception as e:
@@ -87,4 +114,7 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 if __name__ == "__main__":
+    # vehicle_connection = connect_to_vehicle()
+    # print("Vehicle connection established.")
+
     uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('RPI_BACKEND_PORT')), reload=True)
