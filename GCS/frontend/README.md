@@ -55,3 +55,12 @@ From `GCS/frontend` directory:
 The applications will start with colored output:
 - 🔵 **Blue**: GCS Frontend logs  
 - 🟢 **Green**: RecordingAnalysis logs
+
+
+## Running Backend Servers
+Ensure the backend servers for both GCS and RecordingAnalysis are running. You can start them using the provided `start-backend.sh` script in the root directory:
+
+```bash
+./start-backend.sh gcs
+./start-backend.sh recording
+```

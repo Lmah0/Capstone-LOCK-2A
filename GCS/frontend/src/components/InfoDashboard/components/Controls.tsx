@@ -1,5 +1,5 @@
 "use client";
-import { Switch, FormControlLabel, Box, Typography, Paper, Radio, RadioGroup, TextField, InputAdornment, Select, MenuItem, FormControl } from '@mui/material';
+import { Switch, FormControlLabel, Box, Typography, Paper, Radio, RadioGroup, TextField, InputAdornment, Select, MenuItem, FormControl, Button } from '@mui/material';
 import { useState, useEffect } from 'react';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -7,7 +7,9 @@ import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked';
 import PublicIcon from '@mui/icons-material/Public';
 import StraightenIcon from '@mui/icons-material/Straighten';
 import FlightIcon from '@mui/icons-material/Flight';
+import StopIcon from '@mui/icons-material/Stop';
 import { convertDistance } from '../../../utils/unitConversions';
+import axios from 'axios';
 
 interface ControlsProps {
     showHUDElements: boolean;
@@ -20,9 +22,10 @@ interface ControlsProps {
     setFollowDistance: React.Dispatch<React.SetStateAction<number>>;
     flightMode: string;
     setFlightMode: React.Dispatch<React.SetStateAction<string>>;
+    isFollowing?: boolean;
 }
 
-export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance, flightMode, setFlightMode }: ControlsProps) {
+export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance, flightMode, setFlightMode, isFollowing = false }: ControlsProps) {
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
@@ -43,15 +46,52 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     const handleFollowDistanceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = event.target.value;
         setInputValue(newValue);
-        
-        const value = parseFloat(newValue);
-        if (!isNaN(value) && value > 0) {
-            setFollowDistance(isMetric ? value : value / convertDistance.metersToFeet(1));
+    };
+
+    const commitFollowDistance = async () => {
+        try{
+            const value = parseFloat(inputValue);
+            if (!isNaN(value) && value > 0) {
+                const distanceInMeters = isMetric ? value : value / convertDistance.metersToFeet(1);
+                setFollowDistance(distanceInMeters);
+                const resp = await axios.post(`http://localhost:8766/setFollowDistance/`, {distance: distanceInMeters});
+                if (resp.status === 200) {
+                    console.log('Follow distance set successfully:', distanceInMeters);
+                } else {
+                    console.warn('Unexpected response setting follow distance:', resp);
+                }
+            }
+        } catch (error) {
+            console.error('Error sending follow distance to backend:', error);
         }
     };
 
-    const handleFlightModeChange = (event: any) => {
-        setFlightMode(event.target.value);
+    const handleFlightModeChange = async (event: any) => {
+        try {
+            const newFlightMode = event.target.value;
+            setFlightMode(newFlightMode);
+            const resp = await axios.post(`http://localhost:8766/setFlightMode`, { mode: newFlightMode });
+            if (resp.status === 200) {
+                console.log('Flight mode set successfully:', newFlightMode);
+            } else {
+                console.warn('Unexpected response setting flight mode:', resp);
+            }
+        } catch (error) {
+            console.error('Error sending flight mode to backend:', error);
+        }
+    };
+
+    const handleStopFollowing = async () => {
+        try{   
+            const resp = await axios.post(`http://localhost:8766/stopFollowing/`);
+            if (resp.status === 200) {
+                console.log('Stopped following successfully');
+            } else {
+                console.warn('Unexpected response stopping following:', resp);
+            }
+        } catch (error) {
+            console.error('Error sending stop following to backend:', error);
+        }
     };
 
     const flightModes = [
@@ -66,7 +106,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     return (
         <div className="w-full h-full p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {/* HUD Elements Control */}
+                {/* Stop Following Control */}
                 <Paper
                     elevation={3}
                     sx={{
@@ -77,160 +117,33 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     }}
                 >
                     <Box className="flex items-center mb-2">
-                        {showHUDElements ? (
-                            <VisibilityIcon sx={{ color: 'white', mr: 1.5, fontSize: 20 }} />
-                        ) : (
-                            <VisibilityOffIcon sx={{ color: 'white', mr: 1.5, fontSize: 20 }} />
-                        )}
+                        <StopIcon sx={{ color: isFollowing ? '#ef4444' : '#6b7280', mr: 1.5, fontSize: 20 }} />
                         <Typography variant="subtitle1" className="text-white font-semibold">
-                            HUD Elements
+                            Stop Following
                         </Typography>
                     </Box>
-                    
                     <Typography variant="caption" className="text-neutral-300 mb-3 block">
-                        Toggle HUD overlay visibility
+                        {isFollowing ? 'Stop following the current target' : 'No target being followed'}
                     </Typography>
-                    
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={showHUDElements}
-                                onChange={handleHudToggle}
-                                size="small"
-                                sx={{
-                                    '& .MuiSwitch-switchBase.Mui-checked': {
-                                        color: '#3b82f6',
-                                    },
-                                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                        backgroundColor: '#3b82f6',
-                                    },
-                                    '& .MuiSwitch-track': {
-                                        backgroundColor: '#6b7280',
-                                    },
-                                }}
-                            />
-                        }
-                        label={
-                            <Typography variant="body2" className="text-white">
-                                {showHUDElements ? 'Visible' : 'Hidden'}
-                            </Typography>
-                        }
-                    />
-                </Paper>
-
-                {/* Recording Control */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        p: 2,
-                        backgroundColor: 'rgba(38, 38, 38, 0.9)',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        borderRadius: 2,
-                    }}
-                >
-                    <Box className="flex items-center mb-2">
-                        <RadioButtonCheckedIcon sx={{ color: isRecording ? '#ef4444' : 'white', mr: 1.5, fontSize: 20 }} />
-                        <Typography variant="subtitle1" className="text-white font-semibold">
-                            Record Objects
-                        </Typography>
-                    </Box>
-                    
-                    <Typography variant="caption" className="text-neutral-300 mb-3 block">
-                        Record tracked objects
-                    </Typography>
-                    
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={isRecording}
-                                onChange={handleRecordingToggle}
-                                size="small"
-                                sx={{
-                                    '& .MuiSwitch-switchBase.Mui-checked': {
-                                        color: '#ef4444',
-                                    },
-                                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                        backgroundColor: '#ef4444',
-                                    },
-                                    '& .MuiSwitch-track': {
-                                        backgroundColor: '#6b7280',
-                                    },
-                                }}
-                            />
-                        }
-                        label={
-                            <Typography variant="body2" className="text-white">
-                                {isRecording ? 'Recording' : 'Stopped'}
-                            </Typography>
-                        }
-                    />
-                </Paper>
-
-                {/* Units Control */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        p: 2,
-                        backgroundColor: 'rgba(38, 38, 38, 0.9)',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        borderRadius: 2,
-                    }}
-                >
-                    <Box className="flex items-center mb-2">
-                        <PublicIcon sx={{ color: 'white', mr: 1.5, fontSize: 20 }} />
-                        <Typography variant="subtitle1" className="text-white font-semibold">
-                            Units
-                        </Typography>
-                    </Box>
-                    
-                    <Typography variant="caption" className="text-neutral-300 mb-3 block">
-                        Display units system
-                    </Typography>
-                    
-                    <RadioGroup
-                        value={isMetric ? 'metric' : 'imperial'}
-                        onChange={handleMetricToggle}
-                        row
+                    <Button
+                        variant="contained"
+                        onClick={handleStopFollowing}
+                        disabled={!isFollowing}
+                        fullWidth
+                        sx={{
+                            backgroundColor: isFollowing ? '#ef4444' : '#374151',
+                            color: 'white',
+                            '&:hover': {
+                                backgroundColor: isFollowing ? '#dc2626' : '#374151',
+                            },
+                            '&:disabled': {
+                                backgroundColor: '#374151',
+                                color: '#6b7280',
+                            },
+                        }}
                     >
-                        <FormControlLabel
-                            value="metric"
-                            control={
-                                <Radio
-                                    size="small"
-                                    sx={{
-                                        color: '#6b7280',
-                                        '&.Mui-checked': {
-                                            color: '#10b981',
-                                        },
-                                    }}
-                                />
-                            }
-                            label={
-                                <Typography variant="body2" className="text-white">
-                                    Metric
-                                </Typography>
-                            }
-                        />
-                        <FormControlLabel
-                            value="imperial"
-                            control={
-                                <Radio
-                                    size="small"
-                                    sx={{
-                                        color: '#6b7280',
-                                        '&.Mui-checked': {
-                                            color: '#10b981',
-                                        },
-                                    }}
-                                />
-                            }
-                            label={
-                                <Typography variant="body2" className="text-white">
-                                    Imperial
-                                </Typography>
-                            }
-                        />
-                    </RadioGroup>
+                        {isFollowing ? 'Stop Following' : 'Not Following'}
+                    </Button>
                 </Paper>
 
                 {/* Follow Distance Control */}
@@ -258,6 +171,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                         type="number"
                         value={inputValue}
                         onChange={handleFollowDistanceChange}
+                        onBlur={commitFollowDistance}
                         size="small"
                         InputProps={{
                             endAdornment: (
@@ -362,6 +276,173 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                             ))}
                         </Select>
                     </FormControl>
+                </Paper>
+
+                {/* Recording Control */}
+                <Paper
+                    elevation={3}
+                    sx={{
+                        p: 2,
+                        backgroundColor: 'rgba(38, 38, 38, 0.9)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: 2,
+                    }}
+                >
+                    <Box className="flex items-center mb-2">
+                        <RadioButtonCheckedIcon sx={{ color: isRecording ? '#ef4444' : 'white', mr: 1.5, fontSize: 20 }} />
+                        <Typography variant="subtitle1" className="text-white font-semibold">
+                            Record Objects
+                        </Typography>
+                    </Box>
+                    
+                    <Typography variant="caption" className="text-neutral-300 mb-3 block">
+                        Record tracked objects
+                    </Typography>
+                    
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={isRecording}
+                                onChange={handleRecordingToggle}
+                                size="small"
+                                sx={{
+                                    '& .MuiSwitch-switchBase.Mui-checked': {
+                                        color: '#ef4444',
+                                    },
+                                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                        backgroundColor: '#ef4444',
+                                    },
+                                    '& .MuiSwitch-track': {
+                                        backgroundColor: '#6b7280',
+                                    },
+                                }}
+                            />
+                        }
+                        label={
+                            <Typography variant="body2" className="text-white">
+                                {isRecording ? 'Recording' : 'Stopped'}
+                            </Typography>
+                        }
+                    />
+                </Paper>
+
+                {/* HUD Elements Control */}
+                <Paper
+                    elevation={3}
+                    sx={{
+                        p: 2,
+                        backgroundColor: 'rgba(38, 38, 38, 0.9)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: 2,
+                    }}
+                >
+                    <Box className="flex items-center mb-2">
+                        {showHUDElements ? (
+                            <VisibilityIcon sx={{ color: 'white', mr: 1.5, fontSize: 20 }} />
+                        ) : (
+                            <VisibilityOffIcon sx={{ color: 'white', mr: 1.5, fontSize: 20 }} />
+                        )}
+                        <Typography variant="subtitle1" className="text-white font-semibold">
+                            HUD Elements
+                        </Typography>
+                    </Box>
+                    
+                    <Typography variant="caption" className="text-neutral-300 mb-3 block">
+                        Toggle HUD overlay visibility
+                    </Typography>
+                    
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={showHUDElements}
+                                onChange={handleHudToggle}
+                                size="small"
+                                sx={{
+                                    '& .MuiSwitch-switchBase.Mui-checked': {
+                                        color: '#3b82f6',
+                                    },
+                                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                        backgroundColor: '#3b82f6',
+                                    },
+                                    '& .MuiSwitch-track': {
+                                        backgroundColor: '#6b7280',
+                                    },
+                                }}
+                            />
+                        }
+                        label={
+                            <Typography variant="body2" className="text-white">
+                                {showHUDElements ? 'Visible' : 'Hidden'}
+                            </Typography>
+                        }
+                    />
+                </Paper>
+
+                {/* Units Control */}
+                <Paper
+                    elevation={3}
+                    sx={{
+                        p: 2,
+                        backgroundColor: 'rgba(38, 38, 38, 0.9)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: 2,
+                    }}
+                >
+                    <Box className="flex items-center mb-2">
+                        <PublicIcon sx={{ color: 'white', mr: 1.5, fontSize: 20 }} />
+                        <Typography variant="subtitle1" className="text-white font-semibold">
+                            Units
+                        </Typography>
+                    </Box>
+                    
+                    <Typography variant="caption" className="text-neutral-300 mb-3 block">
+                        Display units system
+                    </Typography>
+                    
+                    <RadioGroup
+                        value={isMetric ? 'metric' : 'imperial'}
+                        onChange={handleMetricToggle}
+                        row
+                    >
+                        <FormControlLabel
+                            value="metric"
+                            control={
+                                <Radio
+                                    size="small"
+                                    sx={{
+                                        color: '#6b7280',
+                                        '&.Mui-checked': {
+                                            color: '#10b981',
+                                        },
+                                    }}
+                                />
+                            }
+                            label={
+                                <Typography variant="body2" className="text-white">
+                                    Metric
+                                </Typography>
+                            }
+                        />
+                        <FormControlLabel
+                            value="imperial"
+                            control={
+                                <Radio
+                                    size="small"
+                                    sx={{
+                                        color: '#6b7280',
+                                        '&.Mui-checked': {
+                                            color: '#10b981',
+                                        },
+                                    }}
+                                />
+                            }
+                            label={
+                                <Typography variant="body2" className="text-white">
+                                    Imperial
+                                </Typography>
+                            }
+                        />
+                    </RadioGroup>
                 </Paper>
             </div>
         </div>
