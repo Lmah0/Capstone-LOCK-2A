@@ -6,7 +6,7 @@ import { MapPopupContent } from "./MapPopupContent";
 import { useMapAnimation } from "@/hooks/useMapAnimation";
 import { calculateBearing, offsetBehind, telemetryToCoordinates } from "@/utils/mapUtils";
 import { DEFAULT_MAP_CONFIG, DEFAULT_ANIMATION_CONFIG, DEFAULT_TERRAIN_CONFIG, DEFAULT_SKY_CONFIG } from "@/utils/constants";
-import { TelemetryPoint, Coordinates, popupData } from "@/utils/types";
+import { TelemetryPoint, popupData } from "@/utils/types";
 
 interface MapComponentProps {
   telemetryData: TelemetryPoint[];
@@ -17,9 +17,22 @@ interface MapComponentProps {
   onAnimationEnd?: () => void;
 }
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 export const MapComponent: React.FC<MapComponentProps> = ({telemetryData, isPlaying, restartTrigger, skipTrigger, onAnimationStart, onAnimationEnd}) => {
+  if (!telemetryData || telemetryData.length === 0) {
+    return (
+      <div style={{ 
+        width: '100%', 
+        height: '100%', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        No trajectory data to display
+      </div>
+    );
+  }
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const marker = useRef<mapboxgl.Marker | null>(null);
@@ -28,8 +41,6 @@ export const MapComponent: React.FC<MapComponentProps> = ({telemetryData, isPlay
   const lastSkipTrigger = useRef<number>(0);
 
   const coordinates = telemetryToCoordinates(telemetryData);
-
-  // State for popup data
   const [popupData, setPopupData] = useState<popupData | null>(null);
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | number | null>(null);
 
@@ -181,7 +192,6 @@ export const MapComponent: React.FC<MapComponentProps> = ({telemetryData, isPlay
 
   const setupMarker = () => {
     if (!map.current) return;
-    
     marker.current = new mapboxgl.Marker({ 
       color: "#ef4444",
       scale: 1.2,
