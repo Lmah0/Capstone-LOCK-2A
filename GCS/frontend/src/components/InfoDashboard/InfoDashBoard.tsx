@@ -4,6 +4,7 @@ import { Tabs, Tab, Box } from '@mui/material';
 import FlightData from './components/FlightData';
 import Controls from './components/Controls';
 import RecordedObjects from './components/RecordedObjects';
+import { useWebSocket } from '@/providers/WebSocketProvider';
 
 interface TabPanelProps {
     children: React.ReactNode;
@@ -60,6 +61,7 @@ interface InfoDashBoardProps {
 }
 
 export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
+    const {droneConnection} = useWebSocket();
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -77,10 +79,12 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
             }}>
                 <Box sx={{ 
                     borderBottom: 1, 
-                    borderColor: 'rgb(64 64 64)',
+                    borderColor: droneConnection ? 'rgb(64 64 64)' : 'rgb(239 68 68)',
                     bgcolor: 'rgb(38 38 38)',
                     px: 2,
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    boxShadow: droneConnection 
+                        ? '0 4px 6px -1px rgba(0, 0, 0, 0.1)' 
+                        : '0 4px 6px -1px rgba(239, 68, 68, 0.3), 0 0 0 1px rgba(239, 68, 68, 0.2)'
                 }}>
                     <Tabs 
                         value={value} 
@@ -89,7 +93,7 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                         sx={{
                             minHeight: 56,
                             '& .MuiTab-root': {
-                                color: 'rgb(163 163 163)',
+                                color: droneConnection ? 'rgb(163 163 163)' : 'rgb(248 113 113)',
                                 fontWeight: 500,
                                 fontSize: '0.95rem',
                                 textTransform: 'none',
@@ -97,16 +101,16 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                                 px: 3,
                                 transition: 'all 0.2s ease-in-out',
                                 '&:hover': {
-                                    color: 'rgb(212 212 212)',
+                                    color: droneConnection ? 'rgb(212 212 212)' : 'rgb(252 165 165)',
                                     bgcolor: 'rgba(64, 64, 64, 0.3)',
                                 },
                                 '&.Mui-selected': {
-                                    color: 'white',
+                                    color: droneConnection ? 'white' : 'rgb(239 68 68)',
                                     fontWeight: 600,
                                 },
                             },
                             '& .MuiTabs-indicator': {
-                                backgroundColor: '#3b82f6',
+                                backgroundColor: droneConnection ? '#3b82f6' : '#ef4444',
                                 height: 3,
                                 borderRadius: '2px 2px 0 0',
                             },

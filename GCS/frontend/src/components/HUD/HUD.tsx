@@ -5,6 +5,7 @@ import VideoFeed from './components/VideoFeed';
 import TelemetryData from './components/TelemetryData';
 import FlightMode from './components/FlightMode';
 import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked';
+import { useWebSocket } from '@/providers/WebSocketProvider';
 
 interface HUDProps {
     showHUDElements: boolean;
@@ -16,7 +17,7 @@ interface HUDProps {
 }
 
 export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isMetric, followDistance, flightMode }: HUDProps) {
-
+    const {droneConnection} = useWebSocket();
     return (
         <div className="w-full h-full relative">
             <VideoFeed />
@@ -36,7 +37,11 @@ export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isM
         {showHUDElements && (
             <>
                 <div className="absolute inset-2 pointer-events-none z-5">
-                    <div className="w-full h-full border border-white/20 bg-black/10 rounded-xl"></div>
+                    <div className={`w-full h-full rounded-xl ${
+                        droneConnection 
+                            ? 'bg-black/10 border border-white/20' 
+                            : 'bg-red-500/10 border border-red-500/80 animate-pulse'
+                    }`}></div>
                 </div>
                 
                 <div className="absolute bottom-4 right-4 z-10">
