@@ -69,17 +69,26 @@ def setFlightMode(mode: str):
     """Set the flight mode of the drone"""
     if not mode:
         raise ValueError("Flight mode cannot be empty")
-    print(f"Setting flight mode to: {mode}")
+    try:
+        print(f"Setting flight mode to: {mode}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to set flight mode: {e}")
 
 def setFollowDistance(distance: float):
     """Set the follow distance of the drone"""
     if not distance or distance <= 0:
         raise ValueError("Follow distance must be a positive number")
-    print(f"Setting follow distance to: {distance} meters")
+    try:
+        print(f"Setting follow distance to: {distance} meters")
+    except Exception as e:
+        raise RuntimeError(f"Failed to set follow distance: {e}")
 
 def stopFollowingTarget():
     """Stop following the target"""
-    print("Stopping following the target")
+    try:
+        print("Stopping following the target")
+    except Exception as e:
+        raise RuntimeError(f"Failed to stop following target: {e}")
 
 @app.websocket("/ws/flight-computer")
 async def websocket_endpoint(websocket: WebSocket):

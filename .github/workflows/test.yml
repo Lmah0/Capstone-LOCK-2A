@@ -1,0 +1,30 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [ main, master, tests ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        working-directory: ./GCS/backend
+        run: |
+          python -m pytest tests/test_endpoints.py -v --disable-warnings
