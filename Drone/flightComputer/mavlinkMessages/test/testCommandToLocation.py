@@ -21,4 +21,4 @@ takeoff.takeoff(vehicle_connection, 10)
 
 time.sleep(10)
 
-commandToLocation.command_to_location(vehicle_connection, 47.397742, 8.545594, 10)
+commandToLocation.move_to_location(vehicle_connection, 47.397742, 8.545594, 10)
