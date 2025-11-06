@@ -1,5 +1,5 @@
 """Flight Computer Server running on the raspberry pi onboard the drone."""
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
@@ -69,17 +69,36 @@ def setFlightMode(mode: str):
     """Set the flight mode of the drone"""
     if not mode:
         raise ValueError("Flight mode cannot be empty")
-    print(f"Setting flight mode to: {mode}")
+    try:
+        print(f"Setting flight mode to: {mode}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to set flight mode: {e}")
 
 def setFollowDistance(distance: float):
     """Set the follow distance of the drone"""
     if not distance or distance <= 0:
         raise ValueError("Follow distance must be a positive number")
-    print(f"Setting follow distance to: {distance} meters")
+    try:
+        print(f"Setting follow distance to: {distance} meters")
+    except Exception as e:
+        raise RuntimeError(f"Failed to set follow distance: {e}")
 
 def stopFollowingTarget():
     """Stop following the target"""
-    print("Stopping following the target")
+    try:
+        print("Stopping following the target")
+    except Exception as e:
+        raise RuntimeError(f"Failed to stop following target: {e}")
+
+def moveToLocation(location):
+    """Move the drone to a specified location"""
+    if not location or "lat" not in location or "lon" not in location or "alt" not in location:
+        raise ValueError("Invalid location data")
+    try:
+        # Replace none with vehicle connection when available
+        move_to_location(None, location["lat"], location["lon"], location["alt"])
+    except Exception as e:
+        raise RuntimeError(f"Failed to move to location: {e}")
 
 @app.websocket("/ws/flight-computer")
 async def websocket_endpoint(websocket: WebSocket):
@@ -92,7 +111,9 @@ async def websocket_endpoint(websocket: WebSocket):
             msg = json.loads(data)
             cmd = msg.get("command")
             # Handle commands
-            if cmd == "set_flight_mode":
+            if cmd =="move_to_location":
+                moveToLocation(msg.get("location"))
+            elif cmd == "set_flight_mode":
                 setFlightMode(msg.get("mode"))
             elif cmd == "set_follow_distance":
                 setFollowDistance(msg.get("distance"))
