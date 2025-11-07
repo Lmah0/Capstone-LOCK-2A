@@ -48,8 +48,6 @@ function a11yProps(index: number) {
 interface InfoDashBoardProps {
     showHUDElements: boolean;
     setShowHUDElements: React.Dispatch<React.SetStateAction<boolean>>;
-    isRecording: boolean;
-    setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
     isMetric: boolean;
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
     pinnedTelemetry: string[];
@@ -60,8 +58,8 @@ interface InfoDashBoardProps {
     setFlightMode: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
-    const {droneConnection} = useWebSocket();
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
+    const {droneConnection, isRecording, setIsRecording} = useWebSocket();
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
