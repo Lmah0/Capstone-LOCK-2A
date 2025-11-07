@@ -1,4 +1,4 @@
-name: Backend Tests
+name: Backend and Frontend Tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main, master ]
 
 jobs:
-  test:
+  backend-test:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -28,3 +28,28 @@ jobs:
         working-directory: ./GCS/backend
         run: |
           python -m pytest tests/test_endpoints.py -v --disable-warnings
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './GCS/frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        working-directory: ./GCS/frontend
+        run: |
+          npm ci
+
+      - name: Run frontend tests
+        working-directory: ./GCS/frontend
+        run: |
+          npm test -- --watchAll=false --passWithNoTests

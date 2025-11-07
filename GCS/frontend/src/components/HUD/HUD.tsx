@@ -37,7 +37,7 @@ export default function HUD({ showHUDElements, isRecording, pinnedTelemetry, isM
         {showHUDElements && (
             <>
                 <div className="absolute inset-2 pointer-events-none z-5">
-                    <div className={`w-full h-full rounded-xl ${
+                    <div id='overlay' className={`w-full h-full rounded-xl ${
                         droneConnection 
                             ? 'bg-black/10 border border-white/20' 
                             : 'bg-red-500/10 border border-red-500/80 animate-pulse'

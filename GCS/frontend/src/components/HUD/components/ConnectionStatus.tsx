@@ -9,11 +9,10 @@ export default function ConnectionStatus() {
     return (
         <div>
             {droneConnection ? (
-                <>
-                </>
+                <></>
             ) : (
                 <Tooltip title="Vehicle connection has been lost">
-                    <ErrorIcon color="error" sx={{ fontSize: 42 }} />
+                    <ErrorIcon data-testid="drone-disconnected" color="error" sx={{ fontSize: 42 }} />
                 </Tooltip>
             )}
         </div>
