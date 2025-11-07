@@ -4,17 +4,17 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import json
-import random
+import websockets
 from contextlib import asynccontextmanager
 from typing import List
 import os
 from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
-import datetime
 
 load_dotenv(dotenv_path="../../.env")
 
 active_connections: List[WebSocket] = []
+flight_comp_ws: WebSocket = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +37,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# -- Websocket communication --
+async def send_data_to_connections(message: dict, websockets_list: List[WebSocket] = active_connections):
+    """Send message to all connected WebSocket clients"""
+    for websocket in websockets_list:
+        try:
+            await websocket.send_text(json.dumps(message))
+        except:
+            if websocket in websockets_list:
+                websockets_list.remove(websocket)
+
+async def send_to_flight_comp(message: dict):
+    """Send a JSON command to the flight computer over flight_comp_ws."""
+    global flight_comp_ws
+    if flight_comp_ws is None:
+        raise RuntimeError("Flight computer not connected")
+    raw = json.dumps(message)
+    try:
+        if hasattr(flight_comp_ws, "send_text"):
+            await flight_comp_ws.send_text(raw)
+        else:
+            await flight_comp_ws.send(raw)
+    except Exception as e:
+        print("Failed to send to flight comp:", e)
+        raise
+
+# -- Websocket communication --
+
+# -- Database Endpoints --
 @app.get("/objects")
 def get_all_objects_endpoint():
     """Retrieve a list of all recorded objects with their classifications and timestamps"""
@@ -57,39 +85,6 @@ def delete_object_endpoint(object_id: str):
     except Exception :
         raise HTTPException(status_code=500, detail=f"Failed to delete object: {str(e)}")
     
-@app.post("/setFollowDistance")
-def set_follow_distance(request: dict = Body(...)):
-    """Set the follow distance"""
-    try:
-        distance = request.get("distance")
-        if distance is None:
-            raise HTTPException(status_code=400, detail="Missing 'distance' in body")
-        print(f"Follow distance set to: {distance} meters")
-        return {"status": 200, "message": f"Follow distance set to {distance} meters"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to set follow distance: {str(e)}")
-
-@app.post("/setFlightMode")
-def set_flight_mode(request: dict = Body(...)):
-    """Set the flight mode"""
-    try:
-        mode = request.get("mode")
-        if not mode:
-            raise HTTPException(status_code=400, detail="Missing 'mode' in body")
-        print(f"Flight mode set to: {mode}")
-        return {"status": 200, "message": f"Flight mode set to {mode}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to set flight mode: {str(e)}")
-
-@app.post("/stopFollowing")
-def stop_following():
-    """Stop following the target"""
-    try:
-        print("Stopped following the target.")
-        return {"status": 200, "message": "Stopped following the target."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
-    
 @app.post("/record")
 def record(request: dict = Body(...)):
     """Record tracked object data"""
@@ -102,35 +97,65 @@ def record(request: dict = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
 
+# -- Database Endpoints --
+    
+# -- Flight Computer Communication Endpoints --
+@app.post("/setFollowDistance")
+async def set_follow_distance(request: dict = Body(...)):
+    """Set the follow distance"""
+    try:
+        distance = request.get("distance")
+        if distance is None:
+            raise HTTPException(status_code=400, detail="Missing 'distance' in body")
+        await send_to_flight_comp({"command": "set_follow_distance", "distance": distance})
+        return {"status": 200, "message": f"Follow distance set to {distance} meters"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set follow distance: {str(e)}")
 
-async def send_data_to_connections(message: dict):
-    """Send message to all connected WebSocket clients"""
-    for websocket in active_connections:
-        try:
-            await websocket.send_text(json.dumps(message))
-        except:
-            if websocket in active_connections:
-                active_connections.remove(websocket)
+@app.post("/setFlightMode")
+async def set_flight_mode(request: dict = Body(...)):
+    """Set the flight mode"""
+    try:
+        mode = request.get("mode")
+        if not mode:
+            raise HTTPException(status_code=400, detail="Missing 'mode' in body")
+        await send_to_flight_comp({"command": "set_flight_mode", "mode": mode})
+        return {"status": 200, "message": f"Flight mode set to {mode}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to set flight mode: {str(e)}")
+
+@app.post("/stopFollowing")
+async def stop_following():
+    """Stop following the target"""
+    try:
+        await send_to_flight_comp({"command": "stop_following"})
+        return {"status": 200, "message": "Stopped following the target."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
+    
+# -- Flight Computer Communication Endpoints --
 
 async def send_telemetry_data():
     """Background task that sends data"""
+    global flight_comp_ws
+    flight_comp_url = os.getenv('FLIGHT_COMP_URL')
     while True:
-        basic_telemetry = {
-            "timestamp": datetime.datetime.now().timestamp(),
-            "latitude": random.uniform(40.7123, 60.7133),
-            "longitude": random.uniform(-74.0065, -60.0055),
-            "altitude": random.uniform(145.0, 155.0),
-            "speed": random.uniform(20.0, 30.0),
-            "heading": random.randint(0, 360),
-            "roll": random.uniform(-5.0, 5.0),
-            "pitch": random.uniform(-5.0, 5.0),
-            "yaw": random.uniform(-5.0, 5.0),
-            "battery_remaining": random.uniform(30.0, 100.0),
-            "battery_voltage": random.uniform(10.1, 80.6)
-
-        }
-        await send_data_to_connections(basic_telemetry)
-        await asyncio.sleep(1)
+        try:
+            async with websockets.connect(flight_comp_url) as ws:
+                print("Connected to flight computer")
+                flight_comp_ws = ws
+                async for msg in ws:
+                    try:
+                        data = json.loads(msg)
+                        await send_data_to_connections(data)
+                    except json.JSONDecodeError:
+                        continue
+        except websockets.exceptions.ConnectionClosedError as e:
+            print(f"Lost flight computer connection: {e}, retrying in 5s")
+            await asyncio.sleep(5)
+        except Exception as e:
+            print(f"Error occured: {e}, retrying in 5s")
+            await asyncio.sleep(5)
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):
@@ -139,7 +164,7 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()                  
+            await websocket.receive_text()    # Just keep the connection alive              
     except WebSocketDisconnect:
         print(f"Client disconnected.")
     except Exception as e:
