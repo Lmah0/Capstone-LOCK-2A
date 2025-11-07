@@ -55,7 +55,7 @@ test('HUD Component Connected Drone, Connected Server', () => {
   expect(screen.getByText('Connected')).toBeInTheDocument();
 
   // Drone is connected, so ErrorIcon should not be present
-  expect(screen.queryByTestId('drone-disconnected')).toBeInTheDocument();
+  expect(screen.queryByTestId('drone-disconnected')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Vehicle connection has been lost')).not.toBeInTheDocument();
 });
 
