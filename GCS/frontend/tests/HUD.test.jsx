@@ -3,12 +3,17 @@ import '@testing-library/jest-dom';
 import HUD from '../src/components/HUD/HUD';
 import { useWebSocket } from '../src/providers/WebSocketProvider';
 import * as cpb from 'react-circular-progressbar'; // import to spy on buildStyles
+import axios from 'axios';
 
+jest.mock('axios');
 // Mock the WebSocketProvider at the top level
 jest.mock('../src/providers/WebSocketProvider', () => ({
   useWebSocket: jest.fn(),
   sendMessage: jest.fn()
 }));
+
+// Mock console errors for now to reduce noise during tests
+console.error = jest.fn();
 
 // Clean up after each test
 afterEach(() => {
@@ -25,6 +30,8 @@ beforeEach(() => {
     isRecording: false,
     batteryData: null
   });
+  axios.post.mockResolvedValue({ status: 200, data: {} });
+  axios.get.mockResolvedValue({ status: 200, data: [] });
 });
 
 const mockProps = {

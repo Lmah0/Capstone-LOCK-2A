@@ -32,8 +32,8 @@ export default function FlightData({ pinnedTelemetry, setPinnedTelemetry, isMetr
         unit: string;
         icon: React.ReactNode;
         color?: string;
-        telemetryKey?: string;
-        rawValue?: number;
+        telemetryKey: string;
+        rawValue: number;
     }) => {
         const isPinned = telemetryKey ? pinnedTelemetry.includes(telemetryKey) : false;
         const canPin = telemetryKey && (isPinned || pinnedTelemetry.length < 4);
@@ -45,6 +45,7 @@ export default function FlightData({ pinnedTelemetry, setPinnedTelemetry, isMetr
         
         return (
             <Paper
+                id={`info-dashboard-telemetry-${telemetryKey}`}
                 elevation={2}
                 sx={{
                     p: 1,
@@ -59,6 +60,7 @@ export default function FlightData({ pinnedTelemetry, setPinnedTelemetry, isMetr
                     <Tooltip title={isPinned ? "Unpin from HUD" : canPin ? "Pin to HUD" : "Maximum 4 items can be pinned"}>
                         <span>
                             <IconButton
+                                id={`pin-button-${telemetryKey}`}
                                 onClick={() => handlePinToggle(telemetryKey)}
                                 disabled={!canPin}
                                 sx={{

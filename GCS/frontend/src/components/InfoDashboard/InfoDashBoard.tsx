@@ -67,7 +67,7 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isM
     };
 
     return (
-        <div className="w-full h-full bg-neutral-900">
+        <div id='info-dashboard' className="w-full h-full bg-neutral-900">
             <Box sx={{ 
                 width: '100%', 
                 height: '100%',
@@ -85,6 +85,7 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isM
                         : '0 4px 6px -1px rgba(239, 68, 68, 0.3), 0 0 0 1px rgba(239, 68, 68, 0.2)'
                 }}>
                     <Tabs 
+                        id='info-dashboard-tabs'
                         value={value} 
                         onChange={handleChange} 
                         aria-label="info dashboard tabs"
