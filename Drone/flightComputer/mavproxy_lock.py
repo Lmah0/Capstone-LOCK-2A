@@ -7,7 +7,7 @@ class lock(mp_module.MPModule):
     def __init__(self, mpstate):
         """Initialise module"""
         super(lock, self).__init__(mpstate, "lock", "Capstone location information extraction")
-        self.emit_interval = 0.1
+        self.emit_interval = 0.016  # 60 Hz
         self.last_emitted = time.time()
         self.sock = socket.socket(socket.AF_INET, # Internet
                      socket.SOCK_DGRAM) # UDP
