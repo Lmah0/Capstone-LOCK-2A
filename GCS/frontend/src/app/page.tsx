@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import HUD from '../components/HUD/HUD';
-import InfoDashBoard from '../components/InfoDashboard/InfoDashBoard';
+import InfoDashBoard from '../components/InfoDashBoard/InfoDashBoard';
 
 export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
