@@ -89,7 +89,7 @@ def stopFollowingTarget():
         print("Stopping following the target")
     except Exception as e:
         raise RuntimeError(f"Failed to stop following target: {e}")
-
+    
 def moveToLocation(location):
     """Move the drone to a specified location"""
     if not location or "lat" not in location or "lon" not in location or "alt" not in location:

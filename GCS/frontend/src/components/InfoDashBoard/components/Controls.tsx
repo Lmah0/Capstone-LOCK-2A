@@ -55,9 +55,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                 const distanceInMeters = isMetric ? value : value / convertDistance.metersToFeet(1);
                 setFollowDistance(distanceInMeters);
                 const resp = await axios.post(`http://localhost:8766/setFollowDistance/`, {distance: distanceInMeters});
-                if (resp.status === 200) {
-                    console.log('Follow distance set successfully:', distanceInMeters);
-                } else {
+                if (resp.status !== 200) {
                     console.warn('Unexpected response setting follow distance:', resp);
                 }
             }
@@ -71,9 +69,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
             const newFlightMode = event.target.value;
             setFlightMode(newFlightMode);
             const resp = await axios.post(`http://localhost:8766/setFlightMode`, { mode: newFlightMode });
-            if (resp.status === 200) {
-                console.log('Flight mode set successfully:', newFlightMode);
-            } else {
+            if (resp.status !== 200) {
                 console.warn('Unexpected response setting flight mode:', resp);
             }
         } catch (error) {
@@ -84,9 +80,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     const handleStopFollowing = async () => {
         try{   
             const resp = await axios.post(`http://localhost:8766/stopFollowing/`);
-            if (resp.status === 200) {
-                console.log('Stopped following successfully');
-            } else {
+            if (resp.status !== 200) {
                 console.warn('Unexpected response stopping following:', resp);
             }
         } catch (error) {
@@ -126,6 +120,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                         {isFollowing ? 'Stop following the current target' : 'No target being followed'}
                     </Typography>
                     <Button
+                        id='stop-following-button'
                         variant="contained"
                         onClick={handleStopFollowing}
                         disabled={!isFollowing}
@@ -168,6 +163,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     </Typography>
                     
                     <TextField
+                        id='follow-distance-input'
                         type="number"
                         value={inputValue}
                         onChange={handleFollowDistanceChange}
@@ -302,6 +298,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     <FormControlLabel
                         control={
                             <Switch
+                                id='record-switch'
                                 checked={isRecording}
                                 onChange={handleRecordingToggle}
                                 size="small"
@@ -354,6 +351,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     <FormControlLabel
                         control={
                             <Switch
+                                id='hud-elements-toggle'
                                 checked={showHUDElements}
                                 onChange={handleHudToggle}
                                 size="small"
@@ -400,6 +398,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     </Typography>
                     
                     <RadioGroup
+                        id='unit-toggle'
                         value={isMetric ? 'metric' : 'imperial'}
                         onChange={handleMetricToggle}
                         row
@@ -408,6 +407,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                             value="metric"
                             control={
                                 <Radio
+                                    id='metric-radio'
                                     size="small"
                                     sx={{
                                         color: '#6b7280',
@@ -427,6 +427,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                             value="imperial"
                             control={
                                 <Radio
+                                    id='imperial-radio'
                                     size="small"
                                     sx={{
                                         color: '#6b7280',

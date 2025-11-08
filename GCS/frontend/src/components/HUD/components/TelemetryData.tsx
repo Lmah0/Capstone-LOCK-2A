@@ -94,8 +94,8 @@ export default function TelemetryData({ pinnedTelemetry, isMetric }: TelemetryDa
         
         return (
           <Tooltip key={key} title={config.tooltip} placement="top">
-            <Box display="flex" flexDirection="column" alignItems="center">
-              <IconComponent fontSize="medium" 
+            <Box id='pinned-telemetry' display="flex" flexDirection="column" alignItems="center">
+              <IconComponent fontSize="medium" id={`telemetry-icon-${key}`}
                 sx={{ 
                   opacity: 0.7,
                   ...(config.iconStyle || {})
