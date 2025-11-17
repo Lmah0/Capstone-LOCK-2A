@@ -48,8 +48,6 @@ function a11yProps(index: number) {
 interface InfoDashBoardProps {
     showHUDElements: boolean;
     setShowHUDElements: React.Dispatch<React.SetStateAction<boolean>>;
-    isRecording: boolean;
-    setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
     isMetric: boolean;
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
     pinnedTelemetry: string[];
@@ -60,8 +58,8 @@ interface InfoDashBoardProps {
     setFlightMode: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
-    const {droneConnection} = useWebSocket();
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
+    const {droneConnection, isRecording, setIsRecording} = useWebSocket();
     const [value, setValue] = useState(0);
 
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -69,7 +67,7 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
     };
 
     return (
-        <div className="w-full h-full bg-neutral-900">
+        <div id='info-dashboard' className="w-full h-full bg-neutral-900">
             <Box sx={{ 
                 width: '100%', 
                 height: '100%',
@@ -87,6 +85,7 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isR
                         : '0 4px 6px -1px rgba(239, 68, 68, 0.3), 0 0 0 1px rgba(239, 68, 68, 0.2)'
                 }}>
                     <Tabs 
+                        id='info-dashboard-tabs'
                         value={value} 
                         onChange={handleChange} 
                         aria-label="info dashboard tabs"
