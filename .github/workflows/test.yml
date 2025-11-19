@@ -2,7 +2,9 @@ name: Backend and Frontend Tests
 
 on:
   push:
-    branches: [ main, master, tests ]
+    branches: [ master ]  # Runs on pushes to master
+  pull_request:
+    branches: [ master ]  # Runs on PRs to master
 
 jobs:
   backend-test:
@@ -27,7 +29,7 @@ jobs:
         run: |
           python -m pytest tests/test_endpoints.py -v --disable-warnings
 
-  frontend-test:
+  GCS-UI-test:
     runs-on: ubuntu-latest
     timeout-minutes: 2
 
@@ -49,5 +51,30 @@ jobs:
 
       - name: Run frontend tests
         working-directory: ./GCS/frontend
+        run: |
+          npm test -- --watchAll=false --passWithNoTests
+  
+  recording-analysis-UI-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './RecordingAnalysis/frontend/package-lock.json'
+
+      - name: Install RecordingAnalysis frontend dependencies
+        working-directory: ./RecordingAnalysis/frontend
+        run: |
+          npm ci
+
+      - name: Run RecordingAnalysis frontend tests
+        working-directory: ./RecordingAnalysis/frontend
         run: |
           npm test -- --watchAll=false --passWithNoTests
