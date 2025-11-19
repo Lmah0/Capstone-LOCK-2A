@@ -4,6 +4,7 @@ import boto3
 from dotenv import load_dotenv
 import os
 import uvicorn
+from typing import List, Dict, Any
 
 load_dotenv(dotenv_path="../../.env")
 app = FastAPI()
@@ -50,6 +51,30 @@ async def get_object_data(object_id: str):
     except Exception as e:
         print(f"Error querying data: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    
+@app.get("/all_objects")
+async def get_all_objects()-> List[Dict[str, Any]]:
+    """Retrieve a list of all recorded objects with their classifications and timestamps"""
+    response = table.scan()
+    items = response.get('Items', [])
+    object_list = []
+    
+    for item in items:
+        # Get the first timestamp from positions array
+        first_timestamp = None
+        positions = item.get('positions', [])
+        if positions and len(positions) > 0:
+            first_timestamp = positions[0].get('ts')
+        
+        object_data = {
+            "objectID": item['objectID'], 
+            "classification": item['class'],
+            "timestamp": first_timestamp
+        }
+        object_list.append(object_data)
+    
+    return object_list
+
 
 if __name__ == "__main__":
     uvicorn.run("query:app", host="0.0.0.0", port=int(os.getenv('RECORDING_ANALYSIS_BACKEND_PORT')), reload=True)
