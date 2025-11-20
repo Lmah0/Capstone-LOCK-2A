@@ -1,0 +1,13 @@
+# Backend Dependencies for both GCS and RecordingAnalysis
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+websockets
+python-dotenv==1.0.0
+boto3==1.34.0
+python-multipart==0.0.6
+pymavlink
+
+# Testing Dependencies
+pytest
+pytest-asyncio
+httpx>=0.27.0

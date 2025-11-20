@@ -1,12 +1,11 @@
 "use client";
 import { useState, useEffect } from 'react';
 import HUD from '../components/HUD/HUD';
-import InfoDashBoard from '../components/InfoDashboard/InfoDashBoard';
+import InfoDashBoard from '../components/InfoDashBoard/InfoDashBoard';
 
 export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHUDElements, setShowHUDElements] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
   const [isMetric, setIsMetric] = useState(true);
   const [pinnedTelemetry, setPinnedTelemetry] = useState<string[]>(['speed', 'altitude', 'latitude', 'longitude']);
   const [followDistance, setFollowDistance] = useState(20.0);
@@ -49,7 +48,6 @@ export default function Home() {
       <div className={`w-full bg-neutral-900 ${isFullscreen ? 'h-screen' : 'h-[65vh]'} ${!isFullscreen ? 'border-b border-neutral-800' : ''}`}>
         <HUD 
             showHUDElements={showHUDElements} 
-            isRecording={isRecording} 
             pinnedTelemetry={pinnedTelemetry} 
             isMetric={isMetric} 
             followDistance={followDistance}
@@ -62,8 +60,6 @@ export default function Home() {
           <InfoDashBoard 
               showHUDElements={showHUDElements} 
               setShowHUDElements={setShowHUDElements}
-              isRecording={isRecording}
-              setIsRecording={setIsRecording}
               isMetric={isMetric}
               setIsMetric={setIsMetric}
               pinnedTelemetry={pinnedTelemetry}

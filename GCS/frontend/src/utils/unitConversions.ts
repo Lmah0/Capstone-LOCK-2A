@@ -30,7 +30,10 @@ export const formatUnits = {
    * @param isMetric - whether to display in metric units
    * @returns object with formatted value and unit
    */
-  speed: (mps: number, isMetric: boolean): { value: string, unit: string } => {
+  speed: (mps: number | undefined | null, isMetric: boolean): { value: string, unit: string } => {
+    if (mps === undefined || mps === null || isNaN(mps)) {
+      return { value: "0.00", unit: isMetric ? "m/s" : "ft/s" };
+    }
     if (isMetric) {
       return { value: mps.toFixed(2), unit: "m/s" };
     } else {
@@ -44,7 +47,10 @@ export const formatUnits = {
    * @param isMetric - whether to display in metric units
    * @returns object with formatted value and unit
    */
-  altitude: (meters: number, isMetric: boolean): { value: string, unit: string } => {
+  altitude: (meters: number | undefined | null, isMetric: boolean): { value: string, unit: string } => {
+    if (meters === undefined || meters === null || isNaN(meters)) {
+      return { value: "0.00", unit: isMetric ? "m" : "ft" };
+    }
     if (isMetric) {
       return { value: meters.toFixed(2), unit: "m" };
     } else {
@@ -80,7 +86,10 @@ export const formatUnits = {
    * @param degrees - value in degrees (angles, coordinates, etc.)
    * @returns formatted string with degree symbol
    */
-  degrees: (degrees: number): string => {
+  degrees: (degrees: number | undefined | null): string => {
+    if (degrees === undefined || degrees === null || isNaN(degrees)) {
+      return "0.000°";
+    }
     return `${degrees.toFixed(3)}°`;
   },
   
@@ -89,7 +98,10 @@ export const formatUnits = {
    * @param degrees - value in degrees (angles, coordinates, etc.)
    * @returns object with formatted value and "degrees" unit
    */
-  degreesWithTextUnit: (degrees: number): { value: string, unit: string } => {
+  degreesWithTextUnit: (degrees: number | undefined | null): { value: string, unit: string } => {
+    if (degrees === undefined || degrees === null || isNaN(degrees)) {
+      return { value: "0.0000", unit: "degrees" };
+    }
     return {
       value: degrees.toFixed(4),
       unit: "degrees"
@@ -103,7 +115,7 @@ export const formatUnits = {
    * @param isMetric - whether to display in metric units
    * @returns object with formatted value and unit
    */
-  formatTelemetry: (value: number, telemetryKey: string, isMetric: boolean): { value: string, unit: string } => {
+  formatTelemetry: (value: number | undefined | null, telemetryKey: string, isMetric: boolean): { value: string, unit: string } => {
     switch (telemetryKey) {
       case 'speed':
         return formatUnits.speed(value, isMetric);
@@ -111,12 +123,15 @@ export const formatUnits = {
         return formatUnits.altitude(value, isMetric);
       case 'latitude':
       case 'longitude':
-      case 'bearing':
+      case 'heading':
       case 'roll':
       case 'pitch':
       case 'yaw':
         return formatUnits.degreesWithTextUnit(value);
       default:
+        if (value === undefined || value === null || isNaN(value)) {
+          return { value: "0.00", unit: "" };
+        }
         return { value: value.toFixed(2), unit: "" };
     }
   },
