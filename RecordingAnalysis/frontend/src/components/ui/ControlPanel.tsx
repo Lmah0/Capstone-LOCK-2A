@@ -25,7 +25,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({onReplay, onPauseResu
   };
 
   return (
-    <Card 
+    <Card
+      id='control-panel'
       sx={{ 
         background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
         border: '1px solid #e2e8f0',
@@ -56,6 +57,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({onReplay, onPauseResu
 
         <Stack spacing={2} sx={{ mb: 2 }}>
           <Button
+            id='restart-mission-button'
             variant="contained"
             startIcon={<Replay />}
             onClick={onReplay}
@@ -81,6 +83,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({onReplay, onPauseResu
           {/* Pause/Resume and Skip buttons side by side */}
           <Stack direction="row" spacing={1.5}>
             <Button
+              id='pause-resume-button'
               variant="outlined"
               startIcon={getButtonIcon()}
               onClick={onPauseResume}
@@ -110,6 +113,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({onReplay, onPauseResu
             {/* Skip Animation Button - only show when animation is in progress and not completed */}
             {(isPlaying) && !isCompleted && onSkip && (
               <Button
+                id='skip-animation-button'
                 variant="outlined"
                 startIcon={<SkipNext />}
                 onClick={onSkip}
