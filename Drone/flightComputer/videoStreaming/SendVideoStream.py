@@ -2,17 +2,21 @@ import subprocess
 import sys
 from benchmarking.benchmarkSendingVideoStream import benchmark_ffmpeg
 from benchmarking.benchmarkSendingVideoStream import benchmark_video_quality
+
+VIDEO_INPUT_DEVICE = '/dev/video0'
+OUTPUT_URL = 'udp://10.13.121.44:5000'
+
 ffmpeg_command = [
     "ffmpeg",   # Command-line tool for streaming video/audio.
     "-f", "v4l2", # Specifies the input format.
     "-framerate", "60", # Sets the frame rate.
     "-video_size", "1280x720", # Sets size of video frames.
-    "-i", "/dev/video0", # Specifies the input device.
+    "-i", VIDEO_INPUT_DEVICE, # Specifies the input device.
     "-c:v", "libx264", # Specifies encoder to use.
     "-preset", "ultrafast", # Specifies whether to prioritize speed or compression efficiency.
     "-tune", "zerolatency", # Specifies tuning of encoder.
     "-f", "mpegts", # Sets the output format to MPEG-TS.
-    "udp://192.168.1.91:5000" # Specifies the output destination as a UDP stream to the IP address. Modify based on GCS.
+    OUTPUT_URL # Specifies the output destination as a UDP stream to the IP address. Modify based on GCS.
 ]
 
 def send_video(cmd):

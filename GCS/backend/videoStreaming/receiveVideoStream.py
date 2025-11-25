@@ -2,11 +2,9 @@ import cv2
 import time
 from benchmarking.benchmarkReceivingVideoStream import StreamBenchmark
 from benchmarking.benchmarkReceivingVideoStream import run_quality_metrics
-
-
+STREAM_URL = 'udp://192.168.1.66:5000' # Modify IP address and port based on flight computer
 def setup_video_stream():
-    stream_url = "udp://192.168.1.123:5000"  # Modify IP address and port based on flight computer
-    cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+    cap = cv2.VideoCapture(STREAM_URL, cv2.CAP_FFMPEG)
     if not cap.isOpened():
         print("Failed to open stream")
         exit()
@@ -44,9 +42,8 @@ def benchmark_video_stream(cap, benchmark_time_seconds):
     print("\n--- Stream Performance ---")
     print(report)
 
-
-def return_video_stream(cap):
-    """Generator that yields frames for other functions"""
+def return_video_stream():
+    cap = setup_video_stream()
     while True:
         ret, frame = cap.read()
         if not ret:
