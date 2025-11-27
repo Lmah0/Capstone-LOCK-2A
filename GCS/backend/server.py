@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from videoStreaming import setup_video_stream, return_video_stream
+from fastapi.responses import StreamingResponse
 import uvicorn
 import asyncio
 import json
@@ -12,14 +12,15 @@ from typing import List
 import os
 from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
-import time
-from collections import deque
+import queue
+import base64
 
 load_dotenv(dotenv_path="../../.env")
 
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
+video_frame_queue = queue.Queue(maxsize=3)
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -49,17 +50,17 @@ async def flight_computer_background_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    telemetry_task = asyncio.create_task(flight_computer_background_task())
-    video_task = asyncio.create_task(video_monitor_task())
-    yield
-    # Shutdown logic
-    telemetry_task.cancel()
-    video_task.cancel()
-    try:
-        await telemetry_task
-        await video_task
-    except asyncio.CancelledError:
-        pass
+    if (True): # change to false if just testing ai stuff w/o flight computer
+        task = asyncio.create_task(flight_computer_background_task())
+        yield
+        # Shutdown
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    else:
+        yield
 
 
 app = FastAPI(lifespan=lifespan)
@@ -269,6 +270,71 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
 
+# -- AI Integration Sockets --
+@app.websocket("/ws/ai-frame-reader")
+async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
+    """ Internal WebSocket endpoint to receive JPEG-encoded frames from the Detector Algorithm """
+    await websocket.accept()
+    print("AI Frame Producer Connected.")
+    try:
+        # Expecting raw bytes (base64 encoded JPEG buffer)
+        while True:
+            # Receive base64 string from the AI process
+            base64_frame_data = await websocket.receive_text()
+            
+            # Decode the base64 string back into raw JPEG bytes
+            jpeg_bytes = base64.b64decode(base64_frame_data)
+            
+            # Put the new frame into the queue for the MJPEG streamer
+            try:
+                # Clear old frames to ensure minimum latency
+                while not video_frame_queue.empty():
+                    video_frame_queue.get_nowait()
+                    
+                video_frame_queue.put(jpeg_bytes, block=False)
+            except queue.Full:
+                # If queue is full, just drop the frame to prioritize newer ones (low latency)
+                pass 
+            
+    except WebSocketDisconnect:
+        print("AI Frame Producer disconnected.")
+    except Exception as e:
+        print(f"Error in /ws/ai_frame: {e}")
+    finally:
+        pass
+
+async def generate_video_frames():
+    """Reads JPEG frames from the queue and formats them for MJPEG streaming."""
+    frame_boundary = b'--frame\r\n'
+    content_type = b'Content-Type: image/jpeg\r\n\r\n'
+    
+    while True: 
+        try:
+            # 1. Wait for a new frame
+            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=1)
+
+            # 2. Yield the MJPEG format
+            yield frame_boundary
+            yield content_type
+            yield jpeg_frame
+            yield b'\r\n'
+            
+        except queue.Empty:
+            # If the queue is empty after the timeout, wait briefly and loop again
+            await asyncio.sleep(0.01) 
+            
+        except Exception as e:
+            print(f"Error yielding frame: {e}")
+            break
+
+@app.get("/video_feed")
+async def video_feed():
+    """Stream video frames via MJPEG"""
+    media_type = 'multipart/x-mixed-replace; boundary=frame'
+    return StreamingResponse(
+        generate_video_frames(),
+        media_type=media_type 
+    )
 
 if __name__ == "__main__":
     uvicorn.run(

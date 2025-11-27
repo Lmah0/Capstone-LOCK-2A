@@ -46,6 +46,7 @@ case "$1" in
         echo "Starting GCS Backend..."
         cd "$PROJECT_ROOT/GCS/backend"
         python server.py
+        python AiStream.py
         ;;
     "recording")
         echo "Starting RecordingAnalysis Backend..."
