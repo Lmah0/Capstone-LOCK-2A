@@ -21,7 +21,7 @@ if [ -d "$LOCK2A_DIR" ]; then
         exit
     fi
 fi
-echo "Creating directory: $LOCK2A_DIR"
+
 mkdir -p $LOCK2A_DIR
 
 # Navigate to LOCK2A
@@ -51,11 +51,7 @@ source "$VENV_NAME/bin/activate"
 # Install dependencies
 echo "Installing dependencies..."
 pip install --upgrade pip
-pip install Flask
-pip install flask_cors
-pip install picamera2
-pip install pymavlink
-pip install MAVProxy
+pip install -r requirements.txt
 
 # Setup .bashrc file
 echo "Setting up .bashrc..."
