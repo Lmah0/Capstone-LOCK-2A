@@ -97,7 +97,7 @@ export default function MissionStats({ trajectoryStats }: MissionStatsProps) {
         }
       }}
     >
-      <CardContent sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <CardContent id='mission-stats' sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
         <Typography 
           variant="h6" 
           sx={{ 
