@@ -34,7 +34,7 @@ COPTER_MODES = {
 # --------------------------------------------------------------------------------------
 # Mode Setter
 # --------------------------------------------------------------------------------------
-def set_mode(vehicle_connection, mode_id):
+def set_mode(vehicle_connection, mode):
     """
     Set the flight mode of a connected MAVLink vehicle.
 
@@ -56,6 +56,7 @@ def set_mode(vehicle_connection, mode_id):
         If MAVLink communication fails or times out.
     """
     try:
+        mode_id = COPTER_MODES['mode']
         vehicle_connection.mav.command_long_send(
             target_system=vehicle_connection.target_system,
             target_component=vehicle_connection.target_component,
