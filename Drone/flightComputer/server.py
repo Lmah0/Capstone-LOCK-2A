@@ -138,4 +138,4 @@ if __name__ == "__main__":
     # vehicle_connection = connect_to_vehicle()
     # print("Vehicle connection established.")
 
-    uvicorn.run("server:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)
