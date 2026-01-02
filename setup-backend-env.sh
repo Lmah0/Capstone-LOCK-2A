@@ -20,7 +20,7 @@ fi
 
 # Activate virtual environment
 echo "Activating virtual environment..."
-source "$VENV_PATH/bin/activate"
+source "$VENV_PATH/Scripts/activate"
 
 # Upgrade pip
 echo "Upgrading pip..."
@@ -33,7 +33,7 @@ pip install -r "$PROJECT_ROOT/requirements.txt"
 echo "Backend environment setup complete!"
 echo ""
 echo "To activate the environment manually, run:"
-echo "source $VENV_PATH/bin/activate"
+echo "source $VENV_PATH/Scripts/activate"
 echo ""
 echo "To start backends:"
 echo "cd $PROJECT_ROOT/GCS/backend && ../../start-backend.sh gcs"
