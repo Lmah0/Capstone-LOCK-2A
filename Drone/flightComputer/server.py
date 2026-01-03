@@ -10,6 +10,8 @@ from typing import List
 import os
 from dotenv import load_dotenv
 import datetime
+import threading
+import socket
 from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
 from mavlinkMessages.mode import set_mode
@@ -21,6 +23,23 @@ active_connections: List[WebSocket] = []
 vehicle_connection = None
 
 vehicle_ip = "udp:127.0.0.1:5006" # Need to run mavproxy module on 5006
+
+vehicle_data = {
+    "last_time": -1.0,
+    "latitude": -1.0,
+    "longitude": -1.0,
+    "altitude": -1.0,
+    "msl_altitude": -1.0,
+    "rth_altitude": -1.0,
+    "dlat": -1.0, # Ground X speed (Latitude, positive north)
+    "dlon": -1.0, # Ground Y Speed (Longitude, positive east)
+    "dalt": -1.0, # Ground Z speed (Altitude, positive down)
+    "heading": -1.0,
+    "roll": -1.0,
+    "pitch": -1.0,
+    "yaw": -1.0,
+    "flight_mode": -1
+}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,20 +73,20 @@ async def send_data_to_connections(message: dict):
 
 async def send_telemetry_data():
     while True:
-        basic_telemetry = {
-            "timestamp": datetime.datetime.now().timestamp(),
-            "latitude": random.uniform(40.7123, 60.7133),
-            "longitude": random.uniform(-74.0065, -60.0055),
-            "altitude": random.uniform(145.0, 155.0),
-            "speed": random.uniform(20.0, 30.0),
-            "heading": random.randint(0, 360),
-            "roll": random.uniform(-5.0, 5.0),
-            "pitch": random.uniform(-5.0, 5.0),
-            "yaw": random.uniform(-5.0, 5.0),
-            "battery_remaining": random.uniform(30.0, 100.0),
-            "battery_voltage": random.uniform(10.1, 80.6)
-        }
-        await send_data_to_connections(basic_telemetry)
+        # basic_telemetry = {
+        #     "timestamp": datetime.datetime.now().timestamp(),
+        #     "latitude": random.uniform(40.7123, 60.7133),
+        #     "longitude": random.uniform(-74.0065, -60.0055),
+        #     "altitude": random.uniform(145.0, 155.0),
+        #     "speed": random.uniform(20.0, 30.0),
+        #     "heading": random.randint(0, 360),
+        #     "roll": random.uniform(-5.0, 5.0),
+        #     "pitch": random.uniform(-5.0, 5.0),
+        #     "yaw": random.uniform(-5.0, 5.0),
+        #     "battery_remaining": random.uniform(30.0, 100.0),
+        #     "battery_voltage": random.uniform(10.1, 80.6)
+        # }
+        await send_data_to_connections(vehicle_data)
         await asyncio.sleep(1)
 
 def setFlightMode(mode: str):
@@ -139,6 +158,29 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
+
+def update_vehicle_position_from_flight_controller():
+    """Update vehicle position from flight controller data"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    sock.bind(("127.0.0.1", 5005))
+    
+    while True:
+        data = sock.recvfrom(1024)
+        items = data[0].decode()[1:-1].split(",")
+        message_time = float(items[0])
+
+        if message_time <= vehicle_data["last_time"]:
+            continue
+
+        if len(items) == len(vehicle_data):
+            vehicle_data["last_time"] = message_time
+
+            for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
+                vehicle_data[key] = float(items[i])
+        else:
+            print(f"Received data item does not match expected length...")
 
 if __name__ == "__main__":
     print(f"Attempting to connect to vehicle on: {vehicle_ip}")
