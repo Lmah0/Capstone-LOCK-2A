@@ -18,7 +18,7 @@ import json
 import numpy as np
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path="../.env")
+load_dotenv(dotenv_path="../../.env")
 
 # WebSocket URLs
 BACKEND_PORT = os.getenv('GCS_BACKEND_PORT')
