@@ -10,7 +10,7 @@ from typing import List
 import os
 from dotenv import load_dotenv
 import datetime
-from mavlinkMessages.connect import connect_to_vehicle
+from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
 from mavlinkMessages.mode import set_mode
 
@@ -19,6 +19,8 @@ load_dotenv(dotenv_path="../../.env")
 active_connections: List[WebSocket] = []
 
 vehicle_connection = None
+
+vehicle_ip = "udp:127.0.0.1:5006" # Need to run mavproxy module on 5006
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -139,7 +141,14 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 if __name__ == "__main__":
-    vehicle_connection = connect_to_vehicle()
+    print(f"Attempting to connect to vehicle on: {vehicle_ip}")
+    vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
+    try:
+        verify_connection(vehicle_connection)
+        print("Vehicle connection verfied.")
+    except Exception as e:
+        print(f"Error verifying vehicle connection: {e}")
+        exit(1)
 
     uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)
