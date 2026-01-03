@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import datetime
 import threading
 import socket
+import time
 from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
 from mavlinkMessages.mode import set_mode
@@ -183,6 +184,10 @@ def update_vehicle_position_from_flight_controller():
             print(f"Received data item does not match expected length...")
 
 if __name__ == "__main__":
+    flight_controller_thread = threading.Thread(target=update_vehicle_position_from_flight_controller, daemon=True)
+    flight_controller_thread.start()
+    time.sleep(0.5) # Give some time for the thread to start
+    
     print(f"Attempting to connect to vehicle on: {vehicle_ip}")
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
