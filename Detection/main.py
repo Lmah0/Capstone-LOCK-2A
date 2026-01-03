@@ -60,11 +60,11 @@ def main():
                     cx = bbox[0] + bbox[2]/2
                     cy = bbox[1] + bbox[3]/2
 
-                    # Get telemetry (Example values)
-                    current_alt = 10.0 # meters
+                    # TODO: Get telemetry (will need to update with the embedded information we get from the video stream data) 
+                    current_alt = 10.0 
                     current_lat = 50
                     current_lon = 100
-                    heading = 0 # East
+                    heading = 0
 
                     target_lat, target_lon = locate(
                         current_lat, current_lon, current_alt, heading, cx, cy
