@@ -81,18 +81,16 @@ class Cv2UiHelperClass:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
         
         # Status message with appropriate color
-        if status_text:
-            # Determine color based on message content
-            if "REALIGNED" in status_text:
-                color = (0, 255, 0)  # Green for successful realignment
-            elif "DRIFT DETECTED" in status_text:
-                color = (0, 165, 255)  # Orange for drift warning
-            elif "confident" in status_text:
-                color = (50, 150, 50)  # Dark green for high confidence
-            else:
-                color = (0, 255, 0)  # Default green
-                
-            cv2.putText(frame, status_text, (100, 110),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        # if status_text:
+        #     # Determine color based on message content
+        #     if "REALIGNED" in status_text:
+        #         color = (0, 255, 0)  # Green for successful realignment
+        #     elif "DRIFT DETECTED" in status_text:
+        #         color = (0, 165, 255)  # Orange for drift warning
+        #     elif "confident" in status_text:
+        #         color = (50, 150, 50)  # Dark green for high confidence
+        #     else:
+        #         color = (0, 255, 0)  # Default green   
+        #     cv2.putText(frame, status_text, (100, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             
         return frame
