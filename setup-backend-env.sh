@@ -20,7 +20,16 @@ fi
 
 # Activate virtual environment
 echo "Activating virtual environment..."
-source "$VENV_PATH/Scripts/activate"
+if [ -f "$VENV_PATH/Scripts/activate" ]; then
+    # Windows (Git Bash)
+    source "$VENV_PATH/Scripts/activate"
+elif [ -f "$VENV_PATH/bin/activate" ]; then
+    # Linux / macOS / WSL
+    source "$VENV_PATH/bin/activate"
+else
+    echo "❌ Could not find venv activation script."
+    exit 1
+fi
 
 # Upgrade pip
 echo "Upgrading pip..."

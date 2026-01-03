@@ -25,7 +25,16 @@ fi
 
 # Activate virtual environment
 echo "🔧 Activating shared virtual environment..."
-source "$VENV_PATH/Scripts/activate"
+if [ -f "$VENV_PATH/Scripts/activate" ]; then
+    # Windows (Git Bash)
+    source "$VENV_PATH/Scripts/activate"
+elif [ -f "$VENV_PATH/bin/activate" ]; then
+    # Linux / macOS / WSL
+    source "$VENV_PATH/bin/activate"
+else
+    echo "❌ Could not find venv activation script."
+    exit 1
+fi
 
 case "$1" in
     "all")
@@ -46,7 +55,7 @@ case "$1" in
         echo "Starting GCS Backend..."
         cd "$PROJECT_ROOT/GCS/backend"
         python server.py
-        python AiStream.py
+        python AiStreamClient.py
         ;;
     "recording")
         echo "Starting RecordingAnalysis Backend..."
