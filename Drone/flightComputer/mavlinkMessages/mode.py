@@ -4,37 +4,20 @@ from pymavlink import mavutil
 # MAVLink Copter Modes
 # --------------------------------------------------------------------------------------
 COPTER_MODES = {
-    "STABILIZE": 0,
-    "ACRO": 1,
-    "ALTHOLD": 2,
-    "AUTO": 3,
-    "GUIDED": 4,
-    "LOITER": 5,
+    "Stabilize": 0,
+    "Acro": 1,
+    "Alt Hold": 2,
+    "Auto": 3,
+    "Guided": 4,
+    "Loiter": 5,
     "RTL": 6,
-    "CIRCLE": 7,
-    "LAND": 9,
-    "DRIFT": 11,
-    "SPORT": 13,
-    "FLIP": 14,
-    "AUTOTUNE": 15,
-    "POSHOLD": 16,
-    "BRAKE": 17,
-    "THROW": 18,
-    "AVOID_ADSB": 19,
-    "GUIDED_NOGPS": 20,
-    "SMART_RTL": 21,
-    "FLOWHOLD": 22,
-    "FOLLOW": 23,
-    "ZIGZAG": 24,
-    "SYSTEMID": 25,
-    "HELI_AUTOROTATE": 26,
-    "AUTO_RTL": 27,
+    "Land": 9,
 }
 
 # --------------------------------------------------------------------------------------
 # Mode Setter
 # --------------------------------------------------------------------------------------
-def set_mode(vehicle_connection, mode):
+def set_mode(vehicle_connection, mode_string):
     """
     Set the flight mode of a connected MAVLink vehicle.
 
@@ -56,7 +39,8 @@ def set_mode(vehicle_connection, mode):
         If MAVLink communication fails or times out.
     """
     try:
-        mode_id = COPTER_MODES['mode']
+        mode_id = COPTER_MODES.get(mode_string)
+        
         vehicle_connection.mav.command_long_send(
             target_system=vehicle_connection.target_system,
             target_component=vehicle_connection.target_component,

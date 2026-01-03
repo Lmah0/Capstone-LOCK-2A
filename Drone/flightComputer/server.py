@@ -12,10 +12,13 @@ from dotenv import load_dotenv
 import datetime
 from mavlinkMessages.connect import connect_to_vehicle
 from mavlinkMessages.commandToLocation import move_to_location
+from mavlinkMessages.mode import set_mode
 
 load_dotenv(dotenv_path="../../.env")
 
 active_connections: List[WebSocket] = []
+
+vehicle_connection = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -70,6 +73,7 @@ def setFlightMode(mode: str):
     if not mode:
         raise ValueError("Flight mode cannot be empty")
     try:
+        set_mode(vehicle_connection, mode)
         print(f"Setting flight mode to: {mode}")
     except Exception as e:
         raise RuntimeError(f"Failed to set flight mode: {e}")
@@ -135,11 +139,7 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 if __name__ == "__main__":
-    # vehicle_connection = connect_to_vehicle()
-    # print("Vehicle connection established.")
+    vehicle_connection = connect_to_vehicle()
+    print("Vehicle connection established.")
 
-<<<<<<< Updated upstream
     uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)
-=======
-    uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)
->>>>>>> Stashed changes
