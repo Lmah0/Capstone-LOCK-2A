@@ -9,15 +9,19 @@ import websockets
 from contextlib import asynccontextmanager
 from typing import List
 import os
-from database import get_all_objects, delete_object, record_telemetry_data
+# from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
 import queue
 import base64
+import cv2
 
 load_dotenv(dotenv_path="../../.env")
 
+AI_CMDS_LIST = ["click", "stop_tracking", "reselect_object", "mouse_move"]
+
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
+ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
 
 video_frame_queue = queue.Queue(maxsize=3)
 
@@ -47,7 +51,7 @@ async def flight_computer_background_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if (True): # change to false if just testing ai stuff w/o flight computer
+    if (False): # change to false if just testing ai stuff w/o flight computer
         task = asyncio.create_task(flight_computer_background_task())
         yield
         # Shutdown
@@ -58,7 +62,6 @@ async def lifespan(app: FastAPI):
             pass
     else:
         yield
-
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
@@ -96,6 +99,7 @@ async def send_to_flight_comp(message: dict):
 # -- Database Endpoints --
 @app.get("/objects")
 def get_all_objects_endpoint():
+    return {}
     """Retrieve a list of all recorded objects with their classifications and timestamps"""
     try:
         return get_all_objects()
@@ -104,6 +108,7 @@ def get_all_objects_endpoint():
 
 @app.delete("/delete/object/{object_id}")
 def delete_object_endpoint(object_id: str):
+    return {}
     """Delete a recorded object from the DynamoDB table by its ID"""
     try:
         success = delete_object(object_id)
@@ -116,6 +121,7 @@ def delete_object_endpoint(object_id: str):
 
 @app.post("/record")
 def record(request: dict = Body(...)):
+    return {}
     """Record tracked object data"""
     data = request.get("data")
     if not data:
@@ -178,7 +184,18 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            await websocket.receive_text()    # Just keep the connection alive              
+            message = await websocket.receive_text()
+            try:
+                data = json.loads(message)
+                command_type = data.get("type")
+
+                # Relay AI-related commands to the AI processor
+                if command_type in AI_CMDS_LIST:
+                    await send_data_to_connections(data, ai_command_connections)
+
+            except json.JSONDecodeError:
+                pass  # Just keep connection alive if not valid JSON
+
     except WebSocketDisconnect:
         print(f"Client disconnected.")
     except Exception as e:
@@ -192,6 +209,23 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 # -- AI Integration Sockets --
+@app.websocket("/ws/ai-commands")
+async def websocket_ai_commands_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for AI processor to receive frontend commands (clicks, stop, etc.)"""
+    await websocket.accept()
+    ai_command_connections.append(websocket)
+    print("AI Processor connected to command channel")
+    try:
+        while True:
+            await websocket.receive_text()  # Keep connection alive
+    except WebSocketDisconnect:
+        print("AI Processor disconnected from command channel")
+    except Exception as e:
+        print(f"Error in AI command channel: {e}")
+    finally:
+        if websocket in ai_command_connections:
+            ai_command_connections.remove(websocket)
+            
 @app.websocket("/ws/ai-frame-reader")
 async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
     """ Internal WebSocket endpoint to receive JPEG-encoded frames from the Detector Algorithm """
@@ -224,12 +258,57 @@ async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
     finally:
         pass
 
+@app.websocket("/ws/camera-source")
+async def websocket_camera_source_endpoint(websocket: WebSocket):
+    """Mock camera stream - reads video file and streams frames to AI processor"""
+    await websocket.accept()
+    print("AI Processor connected to camera source")
+    # Video file path - this mocks the camera feed
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    VIDEO_PATH = os.path.join(BASE_DIR, "Detection", "Spike_1.0", "video.mp4")
+    cap = cv2.VideoCapture(VIDEO_PATH)
+
+    if not cap.isOpened():
+        print(f"Error: Could not open video file at {VIDEO_PATH}")
+        await websocket.close()
+        return
+
+    try:
+        while True:
+            ret, frame = cap.read()
+
+            # Loop video when it ends
+            if not ret:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+            # Encode frame as JPEG
+            success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            if not success:
+                continue
+
+            # Send as base64 string
+            base64_frame = base64.b64encode(buffer.tobytes()).decode('utf-8')
+            await websocket.send_text(base64_frame)
+
+            # Control frame rate (~30 fps)
+            await asyncio.sleep(1/30)
+
+    except WebSocketDisconnect:
+        print("AI Processor disconnected from camera source")
+    except Exception as e:
+        print(f"Error in camera source: {e}")
+    finally:
+        cap.release()
+
 async def generate_video_frames():
     """Reads JPEG frames from the queue and formats them for MJPEG streaming."""
     frame_boundary = b'--frame\r\n'
     content_type = b'Content-Type: image/jpeg\r\n\r\n'
-    
-    while True: 
+
+    while True:
         try:
             # 1. Wait for a new frame
             jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=1)
@@ -239,11 +318,11 @@ async def generate_video_frames():
             yield content_type
             yield jpeg_frame
             yield b'\r\n'
-            
+
         except queue.Empty:
             # If the queue is empty after the timeout, wait briefly and loop again
-            await asyncio.sleep(0.01) 
-            
+            await asyncio.sleep(0.01)
+
         except Exception as e:
             print(f"Error yielding frame: {e}")
             break
