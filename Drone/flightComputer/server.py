@@ -101,6 +101,7 @@ def setFlightMode(mode: str):
         raise RuntimeError(f"Failed to set flight mode: {e}")
 
 def setFollowDistance(distance: float):
+    # TODO: Deferring the implementation of this until later
     """Set the follow distance of the drone"""
     if not distance or distance <= 0:
         raise ValueError("Follow distance must be a positive number")
@@ -110,6 +111,7 @@ def setFollowDistance(distance: float):
         raise RuntimeError(f"Failed to set follow distance: {e}")
 
 def stopFollowingTarget():
+    # TODO: Deferring the implementation of this until later
     """Stop following the target"""
     try:
         print("Stopping following the target")
@@ -122,7 +124,7 @@ def moveToLocation(location):
         raise ValueError("Invalid location data")
     try:
         # Replace none with vehicle connection when available
-        move_to_location(None, location["lat"], location["lon"], location["alt"])
+        move_to_location(vehicle_connection, location["lat"], location["lon"], location["alt"])
     except Exception as e:
         raise RuntimeError(f"Failed to move to location: {e}")
 
