@@ -1,4 +1,5 @@
-""" Main server for Ground Control Station (GCS) backend. """
+"""Main server for Ground Control Station (GCS) backend."""
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -16,17 +17,43 @@ load_dotenv(dotenv_path="../../.env")
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
+
+async def flight_computer_background_task():
+    """Background task that connects to flight computer and listens for telemetry"""
+    global flight_comp_ws
+    flight_comp_url = os.getenv("FLIGHT_COMP_URL")
+    if not flight_comp_url:
+        raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
+
+    while True:
+        try:
+            async with websockets.connect(flight_comp_url) as ws:
+                flight_comp_ws = ws
+                print("Connected to flight computer")
+                async for message in ws:
+                    try:
+                        data = json.loads(message)
+                        await send_data_to_connections(data)
+                    except json.JSONDecodeError:
+                        continue
+
+        except Exception as e:
+            print(f"Flight computer connection error: {e}, retrying in 5s")
+            flight_comp_ws = None
+            await asyncio.sleep(5)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    background_task = asyncio.create_task(send_telemetry_data())
+    task = asyncio.create_task(flight_computer_background_task())
     yield
     # Shutdown
-    if background_task:
-        background_task.cancel()
-        try:
-            await background_task
-        except asyncio.CancelledError:
-            pass
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -37,8 +64,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # -- Websocket communication --
-async def send_data_to_connections(message: dict, websockets_list: List[WebSocket] = active_connections):
+async def send_data_to_connections(
+    message: dict, websockets_list: List[WebSocket] = active_connections
+):
     """Send message to all connected WebSocket clients"""
     for websocket in websockets_list:
         try:
@@ -47,22 +77,23 @@ async def send_data_to_connections(message: dict, websockets_list: List[WebSocke
             if websocket in websockets_list:
                 websockets_list.remove(websocket)
 
+
 async def send_to_flight_comp(message: dict):
-    """Send a JSON command to the flight computer over flight_comp_ws."""
+    """Send a JSON command to the flight computer."""
     global flight_comp_ws
     if flight_comp_ws is None:
         raise RuntimeError("Flight computer not connected")
-    raw = json.dumps(message)
+
     try:
-        if hasattr(flight_comp_ws, "send_text"):
-            await flight_comp_ws.send_text(raw)
-        else:
-            await flight_comp_ws.send(raw)
+        await flight_comp_ws.send(json.dumps(message))
     except Exception as e:
-        print("Failed to send to flight comp:", e)
+        print(f"Failed to send to flight comp: {e}")
+        flight_comp_ws = None
         raise
 
+
 # -- Websocket communication --
+
 
 # -- Database Endpoints --
 @app.get("/objects")
@@ -71,7 +102,10 @@ def get_all_objects_endpoint():
     try:
         return get_all_objects()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve objects: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve objects: {str(e)}"
+        )
+
 
 @app.delete("/delete/object/{object_id}")
 def delete_object_endpoint(object_id: str):
@@ -82,47 +116,68 @@ def delete_object_endpoint(object_id: str):
             return {"status": 200}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete object")
-    except Exception :
-        raise HTTPException(status_code=500, detail=f"Failed to delete object: {str(e)}")
-    
+    except Exception:
+        raise HTTPException(status_code=500, detail=f"Failed to delete object")
+
+
 @app.post("/record")
 def record(request: dict = Body(...)):
     """Record tracked object data"""
     data = request.get("data")
     if not data:
-        raise HTTPException(status_code=400, detail="Missing 'data' in body")
+        raise HTTPException(status_code=400, detail="Missing 'data'")
+
+    required_fields = ("timestamp", "latitude", "longitude")
+    # Validate point data
+    for idx, point in enumerate(data):
+        missing = [f for f in required_fields if point.get(f) is None]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing fields {missing} in data point at index {idx}",
+            )
     try:
-        record_telemetry_data(data, classification='Unknown')
+        record_telemetry_data(data, classification="Unknown")
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
 
+
 # -- Database Endpoints --
-    
+
+
 # -- Flight Computer Communication Endpoints --
 @app.post("/setFollowDistance")
 async def set_follow_distance(request: dict = Body(...)):
     """Set the follow distance"""
+    distance = request.get("distance")
+    if distance is None:
+        raise HTTPException(status_code=400, detail="Missing 'distance' in body")
     try:
-        distance = request.get("distance")
-        if distance is None:
-            raise HTTPException(status_code=400, detail="Missing 'distance' in body")
-        await send_to_flight_comp({"command": "set_follow_distance", "distance": distance})
+        await send_to_flight_comp(
+            {"command": "set_follow_distance", "distance": distance}
+        )
         return {"status": 200, "message": f"Follow distance set to {distance} meters"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to set follow distance: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to set follow distance: {str(e)}"
+        )
+
 
 @app.post("/setFlightMode")
 async def set_flight_mode(request: dict = Body(...)):
     """Set the flight mode"""
+    mode = request.get("mode")
+    if not mode:
+        raise HTTPException(status_code=400, detail="Missing 'mode' in body")
     try:
-        mode = request.get("mode")
-        if not mode:
-            raise HTTPException(status_code=400, detail="Missing 'mode' in body")
         await send_to_flight_comp({"command": "set_flight_mode", "mode": mode})
         return {"status": 200, "message": f"Flight mode set to {mode}"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to set flight mode: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to set flight mode: {str(e)}"
+        )
+
 
 @app.post("/stopFollowing")
 async def stop_following():
@@ -131,31 +186,13 @@ async def stop_following():
         await send_to_flight_comp({"command": "stop_following"})
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
-    
+        raise HTTPException(
+            status_code=500, detail=f"Failed to stop following: {str(e)}"
+        )
+
+
 # -- Flight Computer Communication Endpoints --
 
-async def send_telemetry_data():
-    """Background task that sends data"""
-    global flight_comp_ws
-    flight_comp_url = os.getenv('FLIGHT_COMP_URL')
-    while True:
-        try:
-            async with websockets.connect(flight_comp_url) as ws:
-                print("Connected to flight computer")
-                flight_comp_ws = ws
-                async for msg in ws:
-                    try:
-                        data = json.loads(msg)
-                        await send_data_to_connections(data)
-                    except json.JSONDecodeError:
-                        continue
-        except websockets.exceptions.ConnectionClosedError as e:
-            print(f"Lost flight computer connection: {e}, retrying in 5s")
-            await asyncio.sleep(5)
-        except Exception as e:
-            print(f"Error occured: {e}, retrying in 5s")
-            await asyncio.sleep(5)
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):
@@ -164,7 +201,7 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            await websocket.receive_text()    # Just keep the connection alive              
+            await websocket.receive_text()  # Just keep the connection alive
     except WebSocketDisconnect:
         print(f"Client disconnected.")
     except Exception as e:
@@ -177,5 +214,11 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
 
+
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=int(os.getenv("GCS_BACKEND_PORT")),
+        reload=True,
+    )

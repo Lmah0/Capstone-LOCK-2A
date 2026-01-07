@@ -54,9 +54,9 @@ def record_telemetry_data(data: List[Dict[str, Any]], classification: str = 'Unk
     if not data or len(data) == 0:
         raise ValueError("No recording data found in message")
     
-    positions = []
+    object_positions = []
     for point in data:
-        position = {
+        obj_position = {
             'ts': datetime.fromtimestamp(point['timestamp']).isoformat() + 'Z',
             'lat': Decimal(str(point.get('latitude', 0))),
             'lon': Decimal(str(point.get('longitude', 0))),
@@ -64,12 +64,12 @@ def record_telemetry_data(data: List[Dict[str, Any]], classification: str = 'Unk
             'speed': Decimal(str(point.get('speed', 0))),
             'heading': Decimal(str(point.get('heading', 0))),
         }
-        positions.append(position)
+        object_positions.append(obj_position)
 
     # Create formatted data for DynamoDB
     formatted_data = {
         'objectID': str(uuid.uuid4()),
         'class': classification,
-        'positions': positions
+        'positions': object_positions
     }  
     table.put_item(Item=formatted_data)

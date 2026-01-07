@@ -192,7 +192,6 @@ export const MapComponent: React.FC<MapComponentProps> = ({telemetryData, isPlay
 
   const setupMarker = () => {
     if (!map.current) return;
-    console.log("COORDS:", coordinates);
     marker.current = new mapboxgl.Marker({ 
       color: "#ef4444",
       scale: 1.2,
