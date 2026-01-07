@@ -25,7 +25,7 @@ fi
 
 # Activate virtual environment
 echo "🔧 Activating shared virtual environment..."
-source "$VENV_PATH/bin/activate"
+source "$VENV_PATH/Scripts/activate"
 
 case "$1" in
     "all")

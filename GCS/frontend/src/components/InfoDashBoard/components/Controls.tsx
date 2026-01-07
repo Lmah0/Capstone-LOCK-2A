@@ -90,11 +90,13 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
 
     const flightModes = [
         'Loiter',
-        'Manual',
-        'Fly By Wire A',
-        'Fly By Wire B',
+        'Alt Hold',
+        'Land',
         'Auto',
-        'Guided'
+        'Guided',
+        'RTL',
+        'Stabilize',
+        'Acro',
     ];
 
     return (

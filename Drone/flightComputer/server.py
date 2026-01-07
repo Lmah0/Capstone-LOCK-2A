@@ -11,12 +11,37 @@ from typing import List
 import os
 from dotenv import load_dotenv
 import datetime
-from mavlinkMessages.connect import connect_to_vehicle
+import threading
+import socket
+import time
+from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
+from mavlinkMessages.mode import set_mode
 
 load_dotenv(dotenv_path="../../.env")
 
 active_connections: List[WebSocket] = []
+
+vehicle_connection = None
+
+vehicle_ip = "udp:127.0.0.1:5006"  # Need to run mavproxy module on 5006
+
+vehicle_data = {
+    "last_time": -1.0,
+    "latitude": -1.0,
+    "longitude": -1.0,
+    "altitude": -1.0,
+    "msl_altitude": -1.0,
+    "rth_altitude": -1.0,
+    "dlat": -1.0,  # Ground X speed (Latitude, positive north)
+    "dlon": -1.0,  # Ground Y Speed (Longitude, positive east)
+    "dalt": -1.0,  # Ground Z speed (Altitude, positive down)
+    "heading": -1.0,
+    "roll": -1.0,
+    "pitch": -1.0,
+    "yaw": -1.0,
+    "flight_mode": -1,
+}
 
 
 @asynccontextmanager
@@ -35,7 +60,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[f"http://localhost:{os.getenv('GCS_BACKEND_PORT')}"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,7 +92,7 @@ async def send_telemetry_data():
             "battery_remaining": random.uniform(30.0, 100.0),
             "battery_voltage": random.uniform(10.1, 80.6),
         }
-        await send_data_to_connections(basic_telemetry)
+        await send_data_to_connections(vehicle_data)
         await asyncio.sleep(1)
 
 
@@ -76,12 +101,14 @@ def setFlightMode(mode: str):
     if not mode:
         raise ValueError("Flight mode cannot be empty")
     try:
+        set_mode(vehicle_connection, mode)
         print(f"Setting flight mode to: {mode}")
     except Exception as e:
         raise RuntimeError(f"Failed to set flight mode: {e}")
 
 
 def setFollowDistance(distance: float):
+    # TODO: Deferring the implementation of this until later
     """Set the follow distance of the drone"""
     if not distance or distance <= 0:
         raise ValueError("Follow distance must be a positive number")
@@ -92,6 +119,7 @@ def setFollowDistance(distance: float):
 
 
 def stopFollowingTarget():
+    # TODO: Deferring the implementation of this until later
     """Stop following the target"""
     try:
         print("Stopping following the target")
@@ -110,7 +138,9 @@ def moveToLocation(location):
         raise ValueError("Invalid location data")
     try:
         # Replace none with vehicle connection when available
-        move_to_location(None, location["lat"], location["lon"], location["alt"])
+        move_to_location(
+            vehicle_connection, location["lat"], location["lon"], location["alt"]
+        )
     except Exception as e:
         raise RuntimeError(f"Failed to move to location: {e}")
 
@@ -150,13 +180,45 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 
-if __name__ == "__main__":
-    # vehicle_connection = connect_to_vehicle()
-    # print("Vehicle connection established.")
+def update_vehicle_position_from_flight_controller():
+    """Update vehicle position from flight controller data"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-    uvicorn.run(
-        "server:app",
-        host="0.0.0.0",
-        port=int(os.getenv("RPI_BACKEND_PORT")),
-        reload=True,
+    sock.bind(("127.0.0.1", 5005))
+
+    while True:
+        data = sock.recvfrom(1024)
+        items = data[0].decode()[1:-1].split(",")
+        message_time = float(items[0])
+
+        if message_time <= vehicle_data["last_time"]:
+            continue
+
+        if len(items) == len(vehicle_data):
+            vehicle_data["last_time"] = message_time
+
+            for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
+                vehicle_data[key] = float(items[i])
+        else:
+            print(f"Received data item does not match expected length...")
+
+
+if __name__ == "__main__":
+    flight_controller_thread = threading.Thread(
+        target=update_vehicle_position_from_flight_controller, daemon=True
     )
+    flight_controller_thread.start()
+    time.sleep(0.5)  # Give some time for the thread to start
+
+    print(f"Attempting to connect to vehicle on: {vehicle_ip}")
+    vehicle_connection = connect_to_vehicle(vehicle_ip)
+    print("Vehicle connection established.")
+    try:
+        verify_connection(vehicle_connection)
+        print("Vehicle connection verfied.")
+    except Exception as e:
+        print(f"Error verifying vehicle connection: {e}")
+        exit(1)
+
+    uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)

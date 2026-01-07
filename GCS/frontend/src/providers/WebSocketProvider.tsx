@@ -103,23 +103,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
             return;
           }
-          // Update telemetry data
-          setTelemetryData({ 
-              speed: data.speed,
-              altitude: data.altitude,
-              latitude: data.latitude,
-              longitude: data.longitude,
-              heading: data.heading,
-              roll: data.roll,
-              pitch: data.pitch,
-              yaw: data.yaw });
+          // // Update telemetry data
+          // setTelemetryData({ 
+          //     speed: data.speed,
+          //     altitude: data.altitude,
+          //     latitude: data.latitude,
+          //     longitude: data.longitude,
+          //     heading: data.heading,
+          //     roll: data.roll,
+          //     pitch: data.pitch,
+          //     yaw: data.yaw });
           
-          if (data.battery_voltage && data.battery_remaining) {
-            setBatteryData({
-              percentage: data.battery_remaining,
-              usage: data.battery_voltage
-            });
-          }
+          // if (data.battery_voltage && data.battery_remaining) {
+          //   setBatteryData({
+          //     percentage: data.battery_remaining,
+          //     usage: data.battery_voltage
+          //   });
+          // }
           
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);
