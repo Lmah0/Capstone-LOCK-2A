@@ -28,7 +28,6 @@ def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearin
     cam_fov_rad = math.radians(CAM_FOV)
     diagonal_dist = math.tan(cam_fov_rad/2) * uav_altitude * 2
     img_width = math.sqrt(diagonal_dist**2 / (1 + IMG_HEIGHT_PX / IMG_WIDTH_PX)) # w^2 + (h/w)*w^2 = diag^2
-    img_height = IMG_HEIGHT_PX / IMG_WIDTH_PX * img_width
     length_per_px = img_width / IMG_WIDTH_PX
     obj_x = obj_x_px * length_per_px
     obj_y = obj_y_px * length_per_px
