@@ -56,9 +56,6 @@ def main():
                         engine.status_message
                     )
 
-                    # --- Calculate Target Location ---
-                    cx = bbox[0] + bbox[2]/2
-                    cy = bbox[1] + bbox[3]/2
 
                     # TODO: Get telemetry (will need to update with the embedded information we get from the video stream data) 
                     current_alt = 10.0 
@@ -66,9 +63,17 @@ def main():
                     current_lon = 100
                     heading = 0
 
-                    target_lat, target_lon = locate(
-                        current_lat, current_lon, current_alt, heading, cx, cy
-                    )
+                     # --- Calculate Target Location ---
+                    image_center_x = frame.shape[1] / 2
+                    image_center_y = frame.shape[0] / 2
+
+                    bbox_center_x = bbox[0] + bbox[2]/2
+                    bbox_center_y = bbox[1] + bbox[3]/2
+
+                    obj_x_px = bbox_center_x - image_center_x
+                    obj_y_px = bbox_center_y - image_center_y
+
+                    target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
                     
                     # TODO: Update to send cmds to drone
                     print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
