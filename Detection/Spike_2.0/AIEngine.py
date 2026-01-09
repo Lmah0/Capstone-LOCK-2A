@@ -6,6 +6,9 @@ from ultralytics import YOLO
 REDETECT_INTERVAL = 10       # Run YOLO every N frames during tracking
 IOU_THRESHOLD = 0.5          # Required overlap to accept realignment
 CONFIDENCE_THRESHOLD = 0.1   # YOLO detection threshold
+YOLO_NMS_THRESHOLD = 0.7     # NMS IOU threshold for YOLO
+TRACKER_CONFIDENCE_THRESHOLD = 0.5  # Minimum tracker confidence to skip correction
+MIN_DETECTION_IOU = 0.3      # Minimum IoU to consider a detection as a match
 HISTORY_SIZE = 3             # Frames of consistency before realignment
 
 class TrackingEngine:
@@ -22,7 +25,9 @@ class TrackingEngine:
 
     def detect_objects(self, frame):
         """Run YOLO detection"""
-        results = self.model.predict(frame, conf=CONFIDENCE_THRESHOLD, iou=0.7, verbose=False)
+        if frame is None or frame.size == 0:
+            return None
+        results = self.model.predict(frame, conf=CONFIDENCE_THRESHOLD, iou=YOLO_NMS_THRESHOLD, verbose=False)
         return results[0]
 
     def start_tracking(self, frame, bbox, class_id):
@@ -57,10 +62,13 @@ class TrackingEngine:
 
     def _perform_drift_correction(self, frame, tracked_bbox):
         """Internal logic to realign tracker if it drifts"""
+        if frame is None or frame.size == 0:
+            return
+            
         tracker_conf = self.get_tracker_confidence(self.tracker, frame, tracked_bbox)
         
         # Only perform correction if tracker confidence is low
-        if tracker_conf >= 0.5:
+        if tracker_conf >= TRACKER_CONFIDENCE_THRESHOLD:
             # Tracker is confident, clear history and skip correction
             self.detection_history = []
             self.status_message = f"Tracker confident (conf: {tracker_conf:.2f})"
@@ -68,7 +76,7 @@ class TrackingEngine:
 
         # Run YOLO
         results = self.detect_objects(frame)
-        if results.boxes is None or len(results.boxes) == 0:
+        if results is None or results.boxes is None or len(results.boxes) == 0:
             self.detection_history.append(None)
             if len(self.detection_history) > HISTORY_SIZE:
                 self.detection_history.pop(0)
@@ -90,7 +98,7 @@ class TrackingEngine:
             det_bbox = (x1, y1, x2 - x1, y2 - y1)
             
             iou = self.calculate_iou(self.tracked_bbox, det_bbox)
-            if iou > best_iou:
+            if iou > best_iou and iou >= MIN_DETECTION_IOU:
                 best_iou = iou
                 best_box = det_bbox
 
@@ -121,8 +129,7 @@ class TrackingEngine:
                 final_iou = self.calculate_iou(self.tracked_bbox, smoothed_bbox)
 
                 if final_iou > IOU_THRESHOLD:
-                    # Re-Initialize Tracker at new position
-                    self.tracker = cv2.legacy.TrackerCSRT_create()
+                    # Re-initialize tracker at new position (reuse existing tracker instance)
                     self.tracker.init(frame, smoothed_bbox)
                     self.tracked_bbox = smoothed_bbox
                     self.detection_history = []
@@ -167,6 +174,8 @@ class TrackingEngine:
                 # Get max value from response map as confidence estimate
                 confidence = float(np.max(response))
                 return confidence
-            return 0.5  # Default to medium confidence if we can't get response
-        except:
-            return 0.5  # Fallback if method doesn't exist
+            return TRACKER_CONFIDENCE_THRESHOLD  # Default to threshold if we can't get response
+        except Exception as e:
+            # Fallback if method doesn't exist or fails
+            print(f"Warning: Could not get tracker confidence: {e}")
+            return TRACKER_CONFIDENCE_THRESHOLD
