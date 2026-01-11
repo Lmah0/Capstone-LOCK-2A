@@ -204,9 +204,62 @@ def update_vehicle_position_from_flight_controller():
             print(f"Received data item does not match expected length...")
 
 
+# DELETE THIS BEFORE PUSHING
+def update_vehicle_position_mock():
+    """Mock version: Updates vehicle position with simulated data instead of UDP socket"""
+    print("Starting Mock Flight Controller Data Stream...")
+
+    while True:
+        # 1. Generate random values for a 'mock_items' list
+        # We simulate the CSV-style string your original code expects
+        mock_items = [
+            round(time.time(), 2),  # current_time (always increasing)
+            random.uniform(-90.0, 90.0),  # latitude
+            random.uniform(-180.0, 180.0),  # longitude
+            random.uniform(0.0, 500.0),  # altitude (meters)
+            random.uniform(0.0, 1000.0),  # msl_altitude
+            random.uniform(20.0, 100.0),  # rth_altitude
+            random.uniform(-20.0, 20.0),  # dlat (speed)
+            random.uniform(-20.0, 20.0),  # dlon (speed)
+            random.uniform(-5.0, 5.0),  # dalt (speed)
+            random.uniform(0.0, 360.0),  # heading
+            random.uniform(-45.0, 45.0),  # roll
+            random.uniform(-45.0, 45.0),  # pitch
+            random.uniform(0.0, 360.0),  # yaw
+            random.randint(1, 5),  # flight_mode (int)
+        ]
+
+        # Convert to list of strings to maintain your original parsing logic
+        items = [str(val) for val in mock_items]
+        message_time = float(items[0])
+
+        # Original logic: skip if time hasn't progressed
+        if message_time <= vehicle_data["last_time"]:
+            continue
+
+        # Check if the generated list matches the dictionary length
+        if len(items) == len(vehicle_data):
+            vehicle_data["last_time"] = message_time
+
+            # Update the dictionary with the new random values
+            for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
+                vehicle_data[key] = float(items[i])
+
+            print(
+                f"Random Sync -> Lat: {vehicle_data['latitude']:.2f}, "
+                f"Lon: {vehicle_data['longitude']:.2f}, "
+                f"Alt: {vehicle_data['altitude']:.2f}m"
+            )
+        else:
+            print("Error: Item length mismatch")
+
+        # Sleep to prevent high CPU usage and simulate a data rate (e.g., 5Hz)
+        time.sleep(0.2)
+
+
 if __name__ == "__main__":
     flight_controller_thread = threading.Thread(
-        target=update_vehicle_position_from_flight_controller, daemon=True
+        target=update_vehicle_position_mock, daemon=True
     )
     flight_controller_thread.start()
     time.sleep(0.5)  # Give some time for the thread to start

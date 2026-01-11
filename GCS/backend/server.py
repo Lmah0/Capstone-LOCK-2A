@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
+from videoStreaming import setup_video_stream, return_video_stream
 import uvicorn
 import asyncio
 import json
@@ -11,6 +12,8 @@ from typing import List
 import os
 from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
+import time
+from collections import deque
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -34,6 +37,7 @@ async def flight_computer_background_task():
                     try:
                         data = json.loads(message)
                         await send_data_to_connections(data)
+                        await handle_telemetry_video_synchronization(data)
                     except json.JSONDecodeError:
                         continue
 
@@ -45,12 +49,15 @@ async def flight_computer_background_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(flight_computer_background_task())
+    telemetry_task = asyncio.create_task(flight_computer_background_task())
+    video_task = asyncio.create_task(video_monitor_task())
     yield
-    # Shutdown
-    task.cancel()
+    # Shutdown logic
+    telemetry_task.cancel()
+    video_task.cancel()
     try:
-        await task
+        await telemetry_task
+        await video_task
     except asyncio.CancelledError:
         pass
 
@@ -92,7 +99,35 @@ async def send_to_flight_comp(message: dict):
         raise
 
 
+telemetry_buffer = deque(maxlen=100)
+
+
 # -- Websocket communication --
+async def handle_telemetry_video_synchronization(message: dict):
+    """
+    Called by  telemetry task.
+    Stores telemetry with its flight controller timestamp.
+    """
+    telemetry_buffer.append(message)
+
+
+def get_synced_telemetry(frame_timestamp):
+    """
+    Finds the telemetry packet closest to the frame's timestamp.
+    """
+    if not telemetry_buffer:
+        return None
+
+    # Find the packet with the minimum time difference
+    closest_packet = min(
+        telemetry_buffer, key=lambda x: abs(x["last_time"] - frame_timestamp)
+    )
+
+    # If the gap is too large (>200ms), ignore it
+    if abs(closest_packet["last_time"] - frame_timestamp) > 0.2:
+        return None
+
+    return closest_packet
 
 
 # -- Database Endpoints --
@@ -141,6 +176,26 @@ def record(request: dict = Body(...)):
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
+
+
+async def video_monitor_task():
+    global latest_frame_object
+    cap = setup_video_stream()
+
+    for frame in return_video_stream(cap):
+        # Timestamp the frame the moment it is received
+        frame_time = time.time()
+
+        # Find the telemetry that matches frame based on timestamp
+        synced_data = get_synced_telemetry(frame_time)
+
+        if synced_data:
+            # Pair found!
+            # Attach telemetry as metadata to the frame object
+            frame.metadata = synced_data
+        latest_frame_object = frame
+        # PERFORM FURTHER PROCESSING HERE IF NEEDED
+        await asyncio.sleep(0)
 
 
 # -- Database Endpoints --
