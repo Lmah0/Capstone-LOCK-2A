@@ -3,8 +3,6 @@ Sanity tests for GeoLocate.py
 Tests the geolocation calculation functionality
 """
 
-import pytest
-import math
 import sys
 import os
 
