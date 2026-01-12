@@ -52,7 +52,7 @@ def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearin
     # Calculate straight-line distance from drone to object on ground
     dist = math.sqrt(obj_x**2 + obj_y**2)
     
-    # STEP 5: Calculate compass bearing to object
+    # Calculate compass bearing to object
     angle = math.atan2(obj_y_px, obj_x_px)
     # Adjust for drone's heading and coordinate system differences
     true_bearing = (bearing + 90 - math.degrees(angle)) % 360
