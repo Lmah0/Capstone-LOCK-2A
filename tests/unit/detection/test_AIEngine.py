@@ -5,8 +5,7 @@ Tests basic functionality and edge cases for the TrackingEngine class
 
 import pytest
 import numpy as np
-import cv2
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import sys
 import os
 
