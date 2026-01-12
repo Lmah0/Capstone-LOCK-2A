@@ -2,8 +2,6 @@
 from dotenv import load_dotenv
 import boto3
 import os
-from decimal import Decimal
-from datetime import datetime
 import uuid
 from typing import Dict, Any, List
 
@@ -53,23 +51,12 @@ def record_telemetry_data(data: List[Dict[str, Any]], classification: str = 'Unk
     """Transform recording data into DynamoDB format and store it"""
     if not data or len(data) == 0:
         raise ValueError("No recording data found in message")
-    
-    object_positions = []
-    for point in data:
-        obj_position = {
-            'ts': datetime.fromtimestamp(point['timestamp']).isoformat() + 'Z',
-            'lat': Decimal(str(point.get('latitude', 0))),
-            'lon': Decimal(str(point.get('longitude', 0))),
-            'alt': Decimal(str(point.get('altitude', 0))),
-            'speed': Decimal(str(point.get('speed', 0))),
-            'heading': Decimal(str(point.get('heading', 0))),
-        }
-        object_positions.append(obj_position)
 
     # Create formatted data for DynamoDB
     formatted_data = {
         'objectID': str(uuid.uuid4()),
         'class': classification,
-        'positions': object_positions
-    }  
+        'positions': data
+    }
     table.put_item(Item=formatted_data)
+    data.clear()

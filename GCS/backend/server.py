@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 import queue
 import base64
 import cv2
+from decimal import Decimal
+from datetime import datetime
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -25,9 +27,37 @@ ai_command_connections: List[WebSocket] = []  # For AI processor to receive fron
 
 video_frame_queue = queue.Queue(maxsize=3)
 
+is_recording = False
+recording_data = []
+recording_interval = 10 # every 10th heartbeat
+heartbeat_counter = 0
+
+
+def append_record_data(data):
+    """Record tracked object data"""
+    if not data:
+        return
+
+    required_fields = ("timestamp", "latitude", "longitude")
+    # Check if all required fields are present in the single data point
+    missing = [f for f in required_fields if data.get(f) is None]
+    if missing:
+        return
+    
+    obj_position = {
+        'ts': datetime.fromtimestamp(data['timestamp']).isoformat() + 'Z',
+        'lat': Decimal(str(data.get('latitude', 0))),
+        'lon': Decimal(str(data.get('longitude', 0))),
+        'alt': Decimal(str(data.get('altitude', 0))),
+        'speed': Decimal(str(data.get('speed', 0))),
+        'heading': Decimal(str(data.get('heading', 0))),
+    }
+    recording_data.append(obj_position)
+
+
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
-    global flight_comp_ws
+    global flight_comp_ws, heartbeat_counter
     flight_comp_url = os.getenv('FLIGHT_COMP_URL')
     if not flight_comp_url:
         raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
@@ -39,7 +69,13 @@ async def flight_computer_background_task():
                 print("Connected to flight computer")   
                 async for message in ws:
                     try:
-                        data = json.loads(message)
+                        data = json.loads(message)          
+                        # Only record every Nth heartbeat
+                        heartbeat_counter += 1
+                        if heartbeat_counter >= recording_interval: # TODO: NEEDS TO BE MOVED AFTER GEO ALGORITHM
+                            append_record_data(data)
+                            heartbeat_counter = 0
+                        
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
                         continue
@@ -117,25 +153,6 @@ def delete_object_endpoint(object_id: str):
     except Exception :
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
-@app.post("/record")
-def record(request: dict = Body(...)):
-    """Record tracked object data"""
-    data = request.get("data")
-    if not data:
-        raise HTTPException(status_code=400, detail="Missing 'data'")
-
-    required_fields = ("timestamp", "latitude", "longitude")
-    # Validate point data
-    for idx, point in enumerate(data):
-        missing = [f for f in required_fields if point.get(f) is None]
-        if missing:
-            raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
-    try:
-        record_telemetry_data(data, classification='Unknown')
-        return {"status": 200, "message": "Data recorded successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
-
 # -- Database Endpoints --
 
 # -- Flight Computer Communication Endpoints --
@@ -168,11 +185,25 @@ async def stop_following():
     """Stop following the target"""
     try:
         await send_to_flight_comp({"command": "stop_following"})
+        record_telemetry_data(recording_data, classification='Unknown')
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
 
 # -- Flight Computer Communication Endpoints --
+
+@app.post("/recording")
+def toggle_recording():
+    """Toggle recording state"""
+    global is_recording
+    is_recording = not is_recording
+    if not is_recording and recording_data:
+        # Save recorded data when stopping
+        try:
+            record_telemetry_data(recording_data, classification='Unknown')
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save recording data: {str(e)}")
+    return {"is_recording": is_recording}
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):

@@ -37,7 +37,13 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
         setShowHUDElements(event.target.checked);
     };
     const handleRecordingToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setIsRecording(event.target.checked);
+        axios.post('http://localhost:8766/recording')
+            .then(response => {
+                setIsRecording(response.data.is_recording);
+            })
+            .catch(error => {
+                console.error('Error toggling recording:', error);
+            });
     };
     const handleMetricToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         setIsMetric(event.target.value === 'metric');

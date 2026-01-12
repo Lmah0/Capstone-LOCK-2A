@@ -1,7 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { TelemetryData } from '@/utils/telemetryConfig';
-import axios from 'axios';
 
 interface WebSocketContextType {
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -9,8 +8,6 @@ interface WebSocketContextType {
   telemetryData: any;
   batteryData: any;
   droneConnection: boolean;
-  setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
-  isRecording: boolean;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -32,41 +29,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [telemetryData, setTelemetryData] = useState<TelemetryData | null>(null);
   const [batteryData, setBatteryData] = useState<any>(null);
   const [droneConnection, setDroneConnection] = useState<boolean>(false);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const isRecordingRef = useRef<boolean>(false);
-  const recordedDataRef = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const droneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
-
-  useEffect(() => {
-    const syncRecording = async () => {
-      const wasRecording = isRecordingRef.current;
-      isRecordingRef.current = isRecording;   
-      // If we just stopped recording, send the collected data
-      if (wasRecording && !isRecording && recordedDataRef.current.length > 0) {
-        try {
-          const resp = await axios.post('http://localhost:8766/record', {data: recordedDataRef.current});
-          if(resp.status !== 200) {
-            console.error('Failed to send recording to backend', resp.data);
-          }
-          recordedDataRef.current = [];
-        } catch (err) {
-          console.error('Failed to send recording to backend', err);
-        }
-      }
-      
-      // If we just started recording, clear any existing data
-      if (!wasRecording && isRecording) {
-        recordedDataRef.current = [];
-        console.log("Started recording telemetry data");
-      }
-    };
-
-    syncRecording();
-  }, [isRecording]);
 
   const connect = () => {
     // Don't try to connect if already connecting or connected
@@ -123,7 +90,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);
-          
           // Reset drone connection timeout - if we don't receive data for 5 seconds, mark as disconnected
           if (droneTimeoutRef.current) {
             clearTimeout(droneTimeoutRef.current);
@@ -131,11 +97,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           droneTimeoutRef.current = setTimeout(() => {
             setDroneConnection(false);
           }, 5000);
-          
-          // Collect data while recording
-          if (isRecordingRef.current) {
-            recordedDataRef.current.push({...data});
-          }
         }
       } catch (error) {
         console.log('Received text:', event.data);
@@ -188,9 +149,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     sendMessage,
     telemetryData, 
     batteryData, 
-    droneConnection,
-    setIsRecording,
-    isRecording
+    droneConnection
   };
 
   return (

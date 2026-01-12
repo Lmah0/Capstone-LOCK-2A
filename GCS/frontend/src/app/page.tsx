@@ -7,6 +7,7 @@ export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHUDElements, setShowHUDElements] = useState(true);
   const [isMetric, setIsMetric] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
   const [pinnedTelemetry, setPinnedTelemetry] = useState<string[]>(['speed', 'altitude', 'latitude', 'longitude']);
   const [followDistance, setFollowDistance] = useState(20.0);
   const [flightMode, setFlightMode] = useState('');
@@ -47,6 +48,7 @@ export default function Home() {
     <div className="font-sans min-h-screen w-full flex flex-col bg-black">
       <div className={`w-full bg-neutral-900 ${isFullscreen ? 'h-screen' : 'h-[65vh]'} ${!isFullscreen ? 'border-b border-neutral-800' : ''}`}>
         <HUD 
+            isRecording={isRecording}
             showHUDElements={showHUDElements} 
             pinnedTelemetry={pinnedTelemetry} 
             isMetric={isMetric} 
@@ -58,6 +60,8 @@ export default function Home() {
       {!isFullscreen && (
         <div className="h-[35vh] w-full bg-black">
           <InfoDashBoard 
+              isRecording={isRecording}
+              setIsRecording={setIsRecording}
               showHUDElements={showHUDElements} 
               setShowHUDElements={setShowHUDElements}
               isMetric={isMetric}
