@@ -63,17 +63,3 @@ def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearin
     g = geod.Direct(uav_latitude, uav_longitude, azil, dist)
     (obj_latitude, obj_longitude) = (g['lat2'], g['lon2'])
     return (obj_latitude, obj_longitude)
-
-if __name__ == "__main__":
-
-    uav_latitude = 51.1656129
-    uav_longitude = -114.1054339
-    uav_altitude = 680.84  # meters above ground
-    bearing = 2.3774502277374268  # degrees from North (approximately north)
-    obj_x_px = 0.77  # slightly right of center
-    obj_y_px = 0.58  # slightly below center
-    
-    # Calculate object's GPS coordinates
-    (obj_latitude, obj_longitude) = locate(uav_latitude=uav_latitude, uav_longitude= uav_longitude, uav_altitude=uav_altitude, bearing=bearing, 
-        obj_x_px=obj_x_px, obj_y_px=obj_y_px)
-    print("obj_latitude={}, obj_longitude={}".format(obj_latitude, obj_longitude))
