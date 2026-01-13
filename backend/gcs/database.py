@@ -50,7 +50,7 @@ def delete_object(object_id: str) -> bool:
 def record_telemetry_data(data: List[Dict[str, Any]], classification: str = 'Unknown'):
     """Transform recording data into DynamoDB format and store it"""
     if not data or len(data) == 0:
-        raise ValueError("No recording data found in message")
+        return
 
     # Create formatted data for DynamoDB
     formatted_data = {

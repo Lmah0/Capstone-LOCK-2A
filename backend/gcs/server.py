@@ -203,7 +203,7 @@ def toggle_recording():
             record_telemetry_data(recording_data, classification='Unknown')
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to save recording data: {str(e)}")
-    return {"is_recording": is_recording}
+    return {"status": 200, "is_recording": is_recording}
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):

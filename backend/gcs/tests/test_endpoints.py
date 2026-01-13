@@ -76,27 +76,15 @@ async def test_delete_object_endpoint_not_found(async_client):
 
 # ------------------ Record Endpoint Tests ------------------
 @pytest.mark.asyncio
-async def test_record_endpoint_failure(async_client):
-    """Test /record endpoint with invalid data."""
-    response = await async_client.post("/record", json={"data": [{"x": 1, "y": 2}]})
-    assert response.status_code == 400 # Missing 'data' key
+async def test_record_endpoint(async_client):
+    """Test /recording endpoint"""
+    response = await async_client.post("/recording")
+    assert response.status_code == 200
+    assert response.json()["is_recording"] == True # Should start recording
 
-
-@pytest.mark.asyncio
-async def test_record_endpoint_success(async_client):
-    """Test /record endpoint with valid data."""
-    response = await async_client.post("/record", json={
-        "data": [{"timestamp": 1625247600, "latitude": 37.7749, "longitude": -122.4194}]
-    })
-    assert response.status_code == 200 # Successful recording
-
-
-@pytest.mark.asyncio
-async def test_record_endpoint_missing_data(async_client):
-    """Test /record endpoint with missing 'data' key."""
-    response = await async_client.post("/record", json={})
-    assert response.status_code == 400 # Missing 'data' key
-
+    response = await async_client.post("/recording")
+    assert response.status_code == 200
+    assert response.json()["is_recording"] == False # Should stop recording
 
 # ------------------ Flight Mode Tests ------------------
 @pytest.mark.asyncio
