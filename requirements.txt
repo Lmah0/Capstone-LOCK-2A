@@ -13,4 +13,5 @@ geographiclib==2.1
 # Testing Dependencies
 pytest
 pytest-asyncio
+pytest-cov
 httpx>=0.27.0

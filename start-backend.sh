@@ -41,30 +41,30 @@ case "$1" in
         echo "Starting all backends..."
         
         echo "Starting GCS Backend..."
-        (cd "$PROJECT_ROOT/GCS/backend" && python server.py) &
+        (cd "$PROJECT_ROOT/backend/gcs" && python server.py) &
 
         echo "Starting RecordingAnalysis Backend..."
-        (cd "$PROJECT_ROOT/RecordingAnalysis/backend" && python query.py) &
+        (cd "$PROJECT_ROOT/backend/recording_analysis" && python query.py) &
 
         echo "Starting RPi Backend..."
-        (cd "$PROJECT_ROOT/Drone/flightComputer" && python server.py) &
+        (cd "$PROJECT_ROOT/backend/drone/flightComputer" && python server.py) &
 
         wait
         ;;
     "gcs")
         echo "Starting GCS Backend..."
-        cd "$PROJECT_ROOT/GCS/backend"
+        cd "$PROJECT_ROOT/backend/gcs"
         python server.py
         python AiStreamClient.py
         ;;
     "recording")
         echo "Starting RecordingAnalysis Backend..."
-        cd "$PROJECT_ROOT/RecordingAnalysis/backend"
+        cd "$PROJECT_ROOT/backend/recording_analysis"
         python query.py
         ;;
     "rpi")
         echo "Starting RPi Backend..."
-        cd "$PROJECT_ROOT/Drone/flightComputer"
+        cd "$PROJECT_ROOT/backend/drone/flightComputer"
         python server.py
         ;;
     *)
