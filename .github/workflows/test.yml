@@ -67,14 +67,14 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './RecordingAnalysis/frontend/package-lock.json'
+          cache-dependency-path: './frontend/recording_analysis/package-lock.json'
 
       - name: Install RecordingAnalysis frontend dependencies
-        working-directory: ./RecordingAnalysis/frontend
+        working-directory: ./frontend/recording_analysis
         run: |
           npm ci
 
       - name: Run RecordingAnalysis frontend tests
-        working-directory: ./RecordingAnalysis/frontend
+        working-directory: ./frontend/recording_analysis
         run: |
           npm test -- --watchAll=false --passWithNoTests
