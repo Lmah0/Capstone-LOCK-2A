@@ -25,7 +25,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run backend tests
-        working-directory: ./GCS/backend
+        working-directory: ./backend/gcs
         run: |
           python -m pytest tests/test_endpoints.py -v --disable-warnings
 
@@ -42,15 +42,15 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './GCS/frontend/package-lock.json'
+          cache-dependency-path: './frontend/gcs/package-lock.json'
 
       - name: Install frontend dependencies
-        working-directory: ./GCS/frontend
+        working-directory: ./frontend/gcs
         run: |
           npm ci
 
       - name: Run frontend tests
-        working-directory: ./GCS/frontend
+        working-directory: ./frontend/gcs
         run: |
           npm test -- --watchAll=false --passWithNoTests
   

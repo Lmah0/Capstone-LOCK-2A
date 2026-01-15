@@ -20,7 +20,16 @@ fi
 
 # Activate virtual environment
 echo "Activating virtual environment..."
-source "$VENV_PATH/bin/activate"
+if [ -f "$VENV_PATH/Scripts/activate" ]; then
+    # Windows (Git Bash)
+    source "$VENV_PATH/Scripts/activate"
+elif [ -f "$VENV_PATH/bin/activate" ]; then
+    # Linux / macOS / WSL
+    source "$VENV_PATH/bin/activate"
+else
+    echo "❌ Could not find venv activation script."
+    exit 1
+fi
 
 # Upgrade pip
 echo "Upgrading pip..."
@@ -36,5 +45,5 @@ echo "To activate the environment manually, run:"
 echo "source $VENV_PATH/bin/activate"
 echo ""
 echo "To start backends:"
-echo "cd $PROJECT_ROOT/GCS/backend && ../../start-backend.sh gcs"
-echo "cd $PROJECT_ROOT/RecordingAnalysis/backend && ../../start-backend.sh recording"
+echo "cd $PROJECT_ROOT/backend/gcs && ../../start-backend.sh gcs"
+echo "cd $PROJECT_ROOT/backend/recording_analysis && ../../start-backend.sh recording"
