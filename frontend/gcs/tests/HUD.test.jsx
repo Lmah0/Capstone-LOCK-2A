@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import HUD from '../src/components/HUD/HUD';
 import { useWebSocket } from '../src/providers/WebSocketProvider';
@@ -58,15 +58,17 @@ const test_main_container = () => {
   expect(container).toBeInTheDocument();
 }
 
-test('Disconnected Drone, Disconnected Server', () => {
+test('Disconnected Drone, Disconnected Server', async () => {
   useWebSocket.mockReturnValue({ connectionStatus: 'disconnected', droneConnection: false, telemetryData: null});
   render(<HUD {...mockProps} />);
 
   test_main_container();
 
-  // Test that the component renders key HUD elements
-  expect(screen.getByText('Loading telemetry...')).toBeInTheDocument();
-  expect(screen.getByText('Disconnected')).toBeInTheDocument();
+  // Wait for the component to settle and show disconnected state (attempts to connect before showing disconnected)
+  await waitFor(() => {
+    expect(screen.getByText('Loading telemetry...')).toBeInTheDocument();
+    expect(screen.getAllByText('Disconnected').length).toBeGreaterThan(0);
+  }, { timeout: 2000 });
 
   // Test for ErrorIcon existence - drone is disconnected so error should be present
   expect(document.getElementById('drone-disconnected')).toBeInTheDocument();
