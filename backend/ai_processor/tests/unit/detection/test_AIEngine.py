@@ -33,7 +33,7 @@ class TestTrackingEngine:
         return (100, 100, 50, 50)
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_init(self, mock_tracker, mock_yolo, mock_model_path):
         """Test TrackingEngine initialization"""
         engine = TrackingEngine(mock_model_path)
@@ -46,7 +46,7 @@ class TestTrackingEngine:
         mock_yolo.assert_called_once_with(mock_model_path)
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_detect_objects_with_valid_frame(self, mock_tracker, mock_yolo, mock_model_path, sample_frame):
         """Test detect_objects with valid frame"""
         mock_model_instance = Mock()
@@ -61,7 +61,7 @@ class TestTrackingEngine:
         mock_model_instance.predict.assert_called_once()
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_detect_objects_with_none_frame(self, mock_tracker, mock_yolo, mock_model_path):
         """Test detect_objects with None frame"""
         engine = TrackingEngine(mock_model_path)
@@ -70,7 +70,7 @@ class TestTrackingEngine:
         assert result is None
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_detect_objects_with_empty_frame(self, mock_tracker, mock_yolo, mock_model_path):
         """Test detect_objects with empty frame"""
         engine = TrackingEngine(mock_model_path)
@@ -80,7 +80,7 @@ class TestTrackingEngine:
         assert result is None
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_start_tracking(self, mock_tracker, mock_yolo, mock_model_path, sample_frame, sample_bbox):
         """Test start_tracking initializes correctly"""
         mock_tracker_instance = Mock()
@@ -97,7 +97,7 @@ class TestTrackingEngine:
         mock_tracker_instance.init.assert_called_once_with(sample_frame, sample_bbox)
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_update_when_not_tracking(self, mock_tracker, mock_yolo, mock_model_path, sample_frame):
         """Test update returns False when not tracking"""
         engine = TrackingEngine(mock_model_path)
@@ -107,7 +107,7 @@ class TestTrackingEngine:
         assert bbox is None
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_update_when_tracker_succeeds(self, mock_tracker, mock_yolo, mock_model_path, sample_frame, sample_bbox):
         """Test update when tracker successfully tracks"""
         mock_tracker_instance = Mock()
@@ -124,7 +124,7 @@ class TestTrackingEngine:
         assert bbox == sample_bbox
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_update_when_tracker_fails(self, mock_tracker, mock_yolo, mock_model_path, sample_frame):
         """Test update when tracker fails"""
         mock_tracker_instance = Mock()
@@ -167,7 +167,7 @@ class TestTrackingEngine:
         assert 0.14 < iou < 0.15
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_get_tracker_confidence(self, mock_tracker, mock_yolo, mock_model_path, sample_frame, sample_bbox):
         """Test get_tracker_confidence returns a valid value"""
         mock_tracker_instance = Mock()
@@ -180,7 +180,7 @@ class TestTrackingEngine:
         assert confidence == 0.9
     
     @patch('AIEngine.YOLO')
-    @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
+    @patch('AIEngine.cv2.TrackerMIL_create')
     def test_get_tracker_confidence_fallback(self, mock_tracker, mock_yolo, mock_model_path, sample_frame, sample_bbox):
         """Test get_tracker_confidence fallback when method fails"""
         from AIEngine import TRACKER_CONFIDENCE_THRESHOLD
