@@ -25,7 +25,6 @@ ai_command_connections: List[WebSocket] = []  # For AI processor to receive fron
 
 # Larger queue for video frames to handle bursts
 video_frame_queue = queue.Queue(maxsize=10)
-frames_skipped = 0
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -307,7 +306,7 @@ async def generate_video_frames():
     while True:
         try:
             # 1. Wait for a new frame
-            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=0.3)
+            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=0.5)
 
             # 2. Yield the MJPEG format
             yield frame_boundary
