@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 export default function VideoFeed() {
     const backendPort = 8766;
     const videoUrl = `http://localhost:${backendPort}/video_feed`;
-
+    const gcsServerUrl = `ws://localhost:${backendPort}/ws/gcs`;
+    
     const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isTracking, setIsTracking] = useState(false);
@@ -21,7 +22,7 @@ export default function VideoFeed() {
     useEffect(() => {
         const connectWebSocket = () => {
             try {
-                const ws = new WebSocket(`ws://localhost:${backendPort}/ws/gcs`);
+                const ws = new WebSocket(gcsServerUrl);
 
                 ws.onopen = () => {
                     console.log('WebSocket connected');
