@@ -171,7 +171,7 @@ async def _receive_frontend_commands():
                             print(f"Received command: {command_type}")
 
                     except json.JSONDecodeError as e:
-                        print(f"Error decoding command: {e}")
+                        # Silently skip malformed messages
                         continue
                     except Exception as e:
                         print(f"Error processing command: {e}")
@@ -268,20 +268,19 @@ async def _send_frame_async(frame):
         return
 
     try:
-        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
         if not success:
-            print("Failed to encode frame as JPEG")
-            return
+            return  # Silently skip frame encoding failures
 
         base64_string = base64.b64encode(buffer.tobytes()).decode('utf-8')
 
         await _frame_sender_ws.send(base64_string)
 
     except websockets.ConnectionClosed:
-        print("Frame sender connection closed. Will reconnect...")
         _frame_sender_ws = None
-    except Exception as e:
-        print(f"Error sending frame: {e}")
+    except Exception:
+        # Silently skip errors
+        pass
 
 def send_frame(frame):
     """Send the AI processed frame to the frontend."""
@@ -292,12 +291,15 @@ def send_frame(frame):
         return
 
     try:
+        # If server is slow, skip frame and move to the next one
         future = asyncio.run_coroutine_threadsafe(_send_frame_async(frame), _loop)
-        future.result(timeout=0.1)
+        future.result(timeout=0.008)  # 8ms timeout
     except asyncio.TimeoutError:
-        print("Frame send timeout - server may be slow")
+        # server is backlogged, next frame will be sent
+        pass
     except Exception as e:
-        print(f"Error sending frame: {e}")
+        # Silently skip errors
+        pass
 
 # CLEANUP
 def shutdown():

@@ -21,7 +21,7 @@ class TrackingEngine:
             print(f"Loading model from: {model_path}")
 
         self.model = YOLO(model_path)
-        self.tracker = cv2.legacy.TrackerCSRT_create()
+        self.tracker = cv2.TrackerMIL_create()
         
         # State
         self.is_tracking = False
