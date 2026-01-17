@@ -7,7 +7,7 @@ boto3==1.34.0
 python-multipart==0.0.6
 pymavlink==2.4.41
 opencv-python==4.12.0.88
-ultralytics==8.2.0
+ultralytics==8.4.3
 torch==2.5.1
 geographiclib==2.1
 # Testing Dependencies

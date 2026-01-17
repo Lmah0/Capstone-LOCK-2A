@@ -1,5 +1,4 @@
 """Flight Computer Server running on the raspberry pi onboard the drone."""
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -44,6 +43,13 @@ vehicle_data = {
 }
 
 
+from mavlinkMessages.connect import connect_to_vehicle
+from mavlinkMessages.commandToLocation import move_to_location
+
+load_dotenv(dotenv_path="../../../.env")
+
+active_connections: List[WebSocket] = []
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     background_task = asyncio.create_task(send_telemetry_data())
@@ -56,16 +62,14 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[f"http://localhost:{os.getenv('GCS_BACKEND_PORT')}"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 async def send_data_to_connections(message: dict):
     """Send message to all connected WebSocket clients"""
@@ -75,7 +79,6 @@ async def send_data_to_connections(message: dict):
         except:
             if websocket in active_connections:
                 active_connections.remove(websocket)
-
 
 async def send_telemetry_data():
     while True:
@@ -90,25 +93,21 @@ async def send_telemetry_data():
             "pitch": random.uniform(-5.0, 5.0),
             "yaw": random.uniform(-5.0, 5.0),
             "battery_remaining": random.uniform(30.0, 100.0),
-            "battery_voltage": random.uniform(10.1, 80.6),
+            "battery_voltage": random.uniform(10.1, 80.6)
         }
-        await send_data_to_connections(vehicle_data)
+        await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
-
 
 def setFlightMode(mode: str):
     """Set the flight mode of the drone"""
     if not mode:
         raise ValueError("Flight mode cannot be empty")
     try:
-        set_mode(vehicle_connection, mode)
         print(f"Setting flight mode to: {mode}")
     except Exception as e:
         raise RuntimeError(f"Failed to set flight mode: {e}")
 
-
 def setFollowDistance(distance: float):
-    # TODO: Deferring the implementation of this until later
     """Set the follow distance of the drone"""
     if not distance or distance <= 0:
         raise ValueError("Follow distance must be a positive number")
@@ -117,33 +116,22 @@ def setFollowDistance(distance: float):
     except Exception as e:
         raise RuntimeError(f"Failed to set follow distance: {e}")
 
-
 def stopFollowingTarget():
-    # TODO: Deferring the implementation of this until later
     """Stop following the target"""
     try:
         print("Stopping following the target")
     except Exception as e:
         raise RuntimeError(f"Failed to stop following target: {e}")
-
-
+    
 def moveToLocation(location):
     """Move the drone to a specified location"""
-    if (
-        not location
-        or "lat" not in location
-        or "lon" not in location
-        or "alt" not in location
-    ):
+    if not location or "lat" not in location or "lon" not in location or "alt" not in location:
         raise ValueError("Invalid location data")
     try:
         # Replace none with vehicle connection when available
-        move_to_location(
-            vehicle_connection, location["lat"], location["lon"], location["alt"]
-        )
+        move_to_location(None, location["lat"], location["lon"], location["alt"])
     except Exception as e:
         raise RuntimeError(f"Failed to move to location: {e}")
-
 
 @app.websocket("/ws/flight-computer")
 async def websocket_endpoint(websocket: WebSocket):
@@ -152,11 +140,11 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
+            data = await websocket.receive_text()    
             msg = json.loads(data)
             cmd = msg.get("command")
             # Handle commands
-            if cmd == "move_to_location":
+            if cmd =="move_to_location":
                 moveToLocation(msg.get("location"))
             elif cmd == "set_flight_mode":
                 setFlightMode(msg.get("mode"))
@@ -179,99 +167,8 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
 
-
-def update_vehicle_position_from_flight_controller():
-    """Update vehicle position from flight controller data"""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    sock.bind(("127.0.0.1", 5005))
-
-    while True:
-        data = sock.recvfrom(1024)
-        items = data[0].decode()[1:-1].split(",")
-        message_time = float(items[0])
-
-        if message_time <= vehicle_data["last_time"]:
-            continue
-
-        if len(items) == len(vehicle_data):
-            vehicle_data["last_time"] = message_time
-
-            for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
-                vehicle_data[key] = float(items[i])
-        else:
-            print(f"Received data item does not match expected length...")
-
-
-# DELETE THIS BEFORE PUSHING
-def update_vehicle_position_mock():
-    """Mock version: Updates vehicle position with simulated data instead of UDP socket"""
-    print("Starting Mock Flight Controller Data Stream...")
-
-    while True:
-        # 1. Generate random values for a 'mock_items' list
-        # We simulate the CSV-style string your original code expects
-        mock_items = [
-            round(time.time(), 2),  # current_time (always increasing)
-            random.uniform(-90.0, 90.0),  # latitude
-            random.uniform(-180.0, 180.0),  # longitude
-            random.uniform(0.0, 500.0),  # altitude (meters)
-            random.uniform(0.0, 1000.0),  # msl_altitude
-            random.uniform(20.0, 100.0),  # rth_altitude
-            random.uniform(-20.0, 20.0),  # dlat (speed)
-            random.uniform(-20.0, 20.0),  # dlon (speed)
-            random.uniform(-5.0, 5.0),  # dalt (speed)
-            random.uniform(0.0, 360.0),  # heading
-            random.uniform(-45.0, 45.0),  # roll
-            random.uniform(-45.0, 45.0),  # pitch
-            random.uniform(0.0, 360.0),  # yaw
-            random.randint(1, 5),  # flight_mode (int)
-        ]
-
-        # Convert to list of strings to maintain your original parsing logic
-        items = [str(val) for val in mock_items]
-        message_time = float(items[0])
-
-        # Original logic: skip if time hasn't progressed
-        if message_time <= vehicle_data["last_time"]:
-            continue
-
-        # Check if the generated list matches the dictionary length
-        if len(items) == len(vehicle_data):
-            vehicle_data["last_time"] = message_time
-
-            # Update the dictionary with the new random values
-            for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
-                vehicle_data[key] = float(items[i])
-
-            print(
-                f"Random Sync -> Lat: {vehicle_data['latitude']:.2f}, "
-                f"Lon: {vehicle_data['longitude']:.2f}, "
-                f"Alt: {vehicle_data['altitude']:.2f}m"
-            )
-        else:
-            print("Error: Item length mismatch")
-
-        # Sleep to prevent high CPU usage and simulate a data rate (e.g., 5Hz)
-        time.sleep(0.2)
-
-
 if __name__ == "__main__":
-    flight_controller_thread = threading.Thread(
-        target=update_vehicle_position_mock, daemon=True
-    )
-    flight_controller_thread.start()
-    time.sleep(0.5)  # Give some time for the thread to start
+    # vehicle_connection = connect_to_vehicle()
+    # print("Vehicle connection established.")
 
-    print(f"Attempting to connect to vehicle on: {vehicle_ip}")
-    vehicle_connection = connect_to_vehicle(vehicle_ip)
-    print("Vehicle connection established.")
-    try:
-        verify_connection(vehicle_connection)
-        print("Vehicle connection verfied.")
-    except Exception as e:
-        print(f"Error verifying vehicle connection: {e}")
-        exit(1)
-
-    uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('RPI_BACKEND_PORT')), reload=True)

@@ -1,5 +1,4 @@
-"""Main server for Ground Control Station (GCS) backend."""
-
+""" Main server for Ground Control Station (GCS) backend. """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -24,7 +23,8 @@ active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
 
-video_frame_queue = queue.Queue(maxsize=3)
+# Larger queue for video frames to handle bursts
+video_frame_queue = queue.Queue(maxsize=10)
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -37,7 +37,7 @@ async def flight_computer_background_task():
         try:
             async with websockets.connect(flight_comp_url) as ws:
                 flight_comp_ws = ws
-                print("Connected to flight computer")
+                print("Connected to flight computer")   
                 async for message in ws:
                     try:
                         data = json.loads(message)
@@ -50,7 +50,6 @@ async def flight_computer_background_task():
             print(f"Flight computer connection error: {e}, retrying in 5s")
             flight_comp_ws = None
             await asyncio.sleep(5)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -87,20 +86,18 @@ async def send_data_to_connections(
             if websocket in websockets_list:
                 websockets_list.remove(websocket)
 
-
 async def send_to_flight_comp(message: dict):
     """Send a JSON command to the flight computer."""
     global flight_comp_ws
     if flight_comp_ws is None:
         raise RuntimeError("Flight computer not connected")
-
+    
     try:
         await flight_comp_ws.send(json.dumps(message))
     except Exception as e:
         print(f"Failed to send to flight comp: {e}")
         flight_comp_ws = None
         raise
-
 
 telemetry_buffer = deque(maxlen=100)
 
@@ -140,10 +137,7 @@ def get_all_objects_endpoint():
     try:
         return get_all_objects()
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve objects: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve objects: {str(e)}")
 
 @app.delete("/delete/object/{object_id}")
 def delete_object_endpoint(object_id: str):
@@ -154,9 +148,8 @@ def delete_object_endpoint(object_id: str):
             return {"status": 200}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete object")
-    except Exception:
+    except Exception :
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
-
 
 @app.post("/record")
 def record(request: dict = Body(...)):
@@ -170,12 +163,9 @@ def record(request: dict = Body(...)):
     for idx, point in enumerate(data):
         missing = [f for f in required_fields if point.get(f) is None]
         if missing:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Missing fields {missing} in data point at index {idx}",
-            )
+            raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
     try:
-        record_telemetry_data(data, classification="Unknown")
+        record_telemetry_data(data, classification='Unknown')
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
@@ -212,15 +202,10 @@ async def set_follow_distance(request: dict = Body(...)):
     if distance is None:
         raise HTTPException(status_code=400, detail="Missing 'distance' in body")
     try:
-        await send_to_flight_comp(
-            {"command": "set_follow_distance", "distance": distance}
-        )
+        await send_to_flight_comp({"command": "set_follow_distance", "distance": distance})
         return {"status": 200, "message": f"Follow distance set to {distance} meters"}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to set follow distance: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Failed to set follow distance: {str(e)}")
 
 @app.post("/setFlightMode")
 async def set_flight_mode(request: dict = Body(...)):
@@ -232,10 +217,7 @@ async def set_flight_mode(request: dict = Body(...)):
         await send_to_flight_comp({"command": "set_flight_mode", "mode": mode})
         return {"status": 200, "message": f"Flight mode set to {mode}"}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to set flight mode: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Failed to set flight mode: {str(e)}")
 
 @app.post("/stopFollowing")
 async def stop_following():
@@ -244,13 +226,9 @@ async def stop_following():
         await send_to_flight_comp({"command": "stop_following"})
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to stop following: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
 
 # -- Flight Computer Communication Endpoints --
-
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):
@@ -317,14 +295,11 @@ async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
             
             # Put the new frame into the queue for the MJPEG streamer
             try:
-                # Clear old frames to ensure minimum latency
-                while not video_frame_queue.empty():
-                    video_frame_queue.get_nowait()
-                    
-                video_frame_queue.put(jpeg_bytes, block=False)
+                # Try to add frame without blocking
+                video_frame_queue.put_nowait(jpeg_bytes)
             except queue.Full:
-                # If queue is full, just drop the frame to prioritize newer ones (low latency)
-                pass 
+                # Queue is full - skip this frame to maintain latency
+                pass
             
     except WebSocketDisconnect:
         print("AI Frame Producer disconnected.")
@@ -386,7 +361,7 @@ async def generate_video_frames():
     while True:
         try:
             # 1. Wait for a new frame
-            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=1)
+            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=0.5)
 
             # 2. Yield the MJPEG format
             yield frame_boundary
@@ -395,8 +370,8 @@ async def generate_video_frames():
             yield b'\r\n'
 
         except queue.Empty:
-            # If the queue is empty after the timeout, wait briefly and loop again
-            await asyncio.sleep(0.01)
+            # If the queue is empty, wait briefly and continue
+            await asyncio.sleep(0.0005)  # 0.5ms sleep
 
         except Exception as e:
             print(f"Error yielding frame: {e}")
@@ -412,9 +387,4 @@ async def video_feed():
     )
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "server:app",
-        host="0.0.0.0",
-        port=int(os.getenv("GCS_BACKEND_PORT")),
-        reload=True,
-    )
+    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
