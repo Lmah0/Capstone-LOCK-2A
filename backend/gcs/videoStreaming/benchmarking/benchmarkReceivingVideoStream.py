@@ -1,8 +1,10 @@
 from datetime import datetime
+import os
 import time
 import psutil
 import cv2
 import subprocess
+import av
 
 class StreamBenchmark:
     def __init__(self):
@@ -51,41 +53,39 @@ class StreamBenchmark:
             f.write(report)
         return report
 
-def receive_and_save_video(cap, output_file, duration):
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = int(cap.get(cv2.CAP_PROP_FPS)) or 60  
-
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 'mp4v' works well for MP4
-    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
+def receive_and_save_video(url, output_file, duration):
+    # Open the stream to get metadata
+    container = av.open(url)
+    video_stream = container.streams.video[0]
+    
+    # Setup the VideoWriter (OpenCV is still fine for saving the decoded frames)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_file, fourcc, 60, (1280, 720))
 
     start_time = time.time()
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            continue
+    print("Recording stream for quality analysis...")
 
-        out.write(frame)  # save frame to MP4
-        cv2.imshow("Pi Stream", frame)  # optional live display
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-        if time.time() - start_time >= duration:
-            break
-
-    out.release()
-    cv2.destroyAllWindows()
+    try:
+        for frame in container.decode(video=0):
+            img = frame.to_ndarray(format='bgr24')
+            out.write(img)
+            
+            if time.time() - start_time >= duration:
+                break
+    finally:
+        out.release()
+        container.close()
     print(f"Video saved as {output_file}")
 
-def run_quality_metrics(cap, reference_video, received_video, duration=25):
-    print("Receiving and saving video for quality assessment...")
-    receive_and_save_video(cap, received_video, duration)
+def run_quality_metrics(reference_video, received_video):
+    null_out = "NUL" if os.name == 'nt' else "/dev/null"
+    
     commands = {
-        "psnr": f'ffmpeg -i "{reference_video}" -i "{received_video}" -lavfi "[0:v][1:v]psnr=stats_file=psnr.log" -f null NUL',
-        "ssim": f'ffmpeg -i "{reference_video}" -i "{received_video}" -lavfi "[0:v][1:v]ssim=stats_file=ssim.log" -f null NUL',
-        "vmaf": f"ffmpeg -i {reference_video} -i {received_video} -lavfi libvmaf='log_path=vmaf.json:log_fmt=json' -f null -"
+        "psnr": f'ffmpeg -i "{reference_video}" -i "{received_video}" -lavfi "psnr" -f null {null_out}',
+        "ssim": f'ffmpeg -i "{reference_video}" -i "{received_video}" -lavfi "ssim" -f null {null_out}',
+        "vmaf": f'ffmpeg -i "{reference_video}" -i "{received_video}" -lavfi libvmaf -f null {null_out}'
     }
+    
     for name, cmd in commands.items():
         print(f"\n--- Running {name.upper()} ---")
         subprocess.run(cmd, shell=True)
-

@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path="../../.env")
 
 # WebSocket URLs
-BACKEND_PORT = os.getenv('GCS_BACKEND_PORT')
+BACKEND_PORT =  os.getenv('GCS_BACKEND_PORT', '8766')
 CAMERA_WS_URL = f"ws://localhost:{BACKEND_PORT}/ws/camera-source"
 COMMAND_WS_URL = f"ws://localhost:{BACKEND_PORT}/ws/ai-commands"
 FRAME_SENDER_WS_URL = f"ws://localhost:{BACKEND_PORT}/ws/ai-frame-reader"

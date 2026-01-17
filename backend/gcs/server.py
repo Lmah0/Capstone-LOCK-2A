@@ -7,13 +7,22 @@ import asyncio
 import json
 import websockets
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Dict, Optional
 import os
-from database import get_all_objects, delete_object, record_telemetry_data
+# from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
+from videoStreaming.FrameTelemetrySynchronizer import FrameTelemetrySynchronizer
+from videoStreaming.receiveVideoStream import video_receiver_sync_task
 import queue
 import base64
 import cv2
+import time
+import av
+import socket
+import threading
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -21,15 +30,144 @@ AI_CMDS_LIST = ["click", "stop_tracking", "reselect_object", "mouse_move"]
 
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
-ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
+ai_command_connections: List[WebSocket] = []
 
-# Larger queue for video frames to handle bursts
-video_frame_queue = queue.Queue(maxsize=10)
+# Video frame queue for MJPEG streaming
+video_frame_queue = queue.Queue(maxsize=2)
+
+# Video stream configuration
+STREAM_URL = 'udp://10.13.20.180:5000'  # Video from drone
+TIMESTAMP_PORT = 5001  # Timestamps from drone
+
+# # Timestamp synchronization structures
+# @dataclass
+# class TimestampedFrame:
+#     frame_number: int
+#     wall_clock_time: float
+#     jpeg_data: bytes
+#     telemetry: Optional[Dict] = None
+
+# @dataclass
+# class TelemetryData:
+#     timestamp: float
+#     data: Dict
+
+# class TimestampReceiver:
+#     """Receive JSON timestamps from separate UDP port"""
+    
+#     def __init__(self, port):
+#         self.frame_timestamps = {}
+#         self.port = port
+#         self.running = False
+#         self.sock = None
+    
+#     def start_receiving(self):
+#         """Start background thread to receive timestamps"""
+#         self.running = True
+#         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#         self.sock.bind(('0.0.0.0', self.port))
+#         self.sock.settimeout(1.0)
+        
+#         thread = threading.Thread(target=self._receive_loop, daemon=True)
+#         thread.start()
+#         print(f"✓ Listening for frame timestamps on port {self.port}")
+#         return thread
+    
+#     def _receive_loop(self):
+#         """Background loop to receive timestamp packets"""
+#         while self.running:
+#             try:
+#                 data, addr = self.sock.recvfrom(4096)
+#                 timestamp_info = json.loads(data.decode('utf-8'))
+                
+#                 frame_num = timestamp_info['frame_number']
+#                 self.frame_timestamps[frame_num] = timestamp_info
+                    
+#             except socket.timeout:
+#                 continue
+#             except json.JSONDecodeError as e:
+#                 print(f"Invalid JSON: {e}")
+#             except Exception as e:
+#                 if self.running:
+#                     print(f"Timestamp receive error: {e}")
+    
+#     def stop_receiving(self):
+#         """Stop receiving timestamps"""
+#         self.running = False
+#         if self.sock:
+#             self.sock.close()
+    
+#     def get_timestamp(self, frame_number):
+#         """Get timestamp for a specific frame number"""
+#         return self.frame_timestamps.get(frame_number, None)
+
+
+# class FrameTelemetrySynchronizer:
+#     """Synchronizes video frames with telemetry data based on wall-clock timestamps"""
+    
+#     def __init__(self, max_history=300):  # Keep last 5 seconds at 60fps
+#         self.telemetry_buffer = deque(maxlen=max_history)
+#         self.frame_buffer = deque(maxlen=max_history)
+#         self.max_time_diff = 0.6  # Maximum 100ms difference for matching
+    
+#     def add_telemetry(self, timestamp: float, data: Dict):
+#         """Add telemetry data with timestamp"""
+#         self.telemetry_buffer.append(TelemetryData(timestamp, data))
+    
+#     def add_frame(self, frame_number: int, timestamp: float, jpeg_data: bytes) -> TimestampedFrame:
+#         """Add frame with timestamp and match with closest telemetry"""
+#         # Find closest telemetry data
+#         matched_telemetry = self._find_closest_telemetry(timestamp)
+        
+#         frame = TimestampedFrame(
+#             frame_number=frame_number,
+#             wall_clock_time=timestamp,
+#             jpeg_data=jpeg_data,
+#             telemetry=matched_telemetry
+#         )
+        
+#         self.frame_buffer.append(frame)
+#         return frame
+    
+#     def _find_closest_telemetry(self, target_timestamp: float) -> Optional[Dict]:
+#         """Find telemetry data closest to target timestamp"""
+#         if not self.telemetry_buffer:
+#             return None
+        
+#         closest = min(
+#             self.telemetry_buffer,
+#             key=lambda t: abs(t.timestamp - target_timestamp)
+#         )
+        
+#         time_diff = abs(closest.timestamp - target_timestamp)
+        
+#         # Only return if within acceptable time difference
+#         if time_diff <= self.max_time_diff:
+#             return {
+#                 **closest.data,
+#                 'sync_time_diff_ms': time_diff * 1000,
+#                 'telemetry_timestamp': closest.timestamp,
+#                 'frame_timestamp': target_timestamp
+#             }
+        
+#         return None
+    
+#     def get_frame_with_telemetry(self, frame_number: int) -> Optional[TimestampedFrame]:
+#         """Get a specific frame with its matched telemetry"""
+#         for frame in reversed(self.frame_buffer):
+#             if frame.frame_number == frame_number:
+#                 return frame
+#         return None
+
+# Global synchronizer
+frame_telemetry_sync = FrameTelemetrySynchronizer()
+
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
     global flight_comp_ws
-    flight_comp_url = os.getenv("FLIGHT_COMP_URL")
+    print("Starting flight computer background task...")
+    flight_comp_url = os.getenv("FLIGHT_COMP_URL", "ws://192.168.1.123:5555/ws/flight-computer")
     if not flight_comp_url:
         raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
 
@@ -41,8 +179,18 @@ async def flight_computer_background_task():
                 async for message in ws:
                     try:
                         data = json.loads(message)
+                        
+                        # Extract timestamp from telemetry data
+                        telemetry_timestamp = data.get('last_time')
+                        
+                        if telemetry_timestamp:
+                            # Add to synchronizer
+                            frame_telemetry_sync.add_telemetry(telemetry_timestamp, data)
+                            # print(f"Received telemetry at {telemetry_timestamp}")
+                        
+                        # Forward to frontend
                         await send_data_to_connections(data)
-                        await handle_telemetry_video_synchronization(data)
+                        
                     except json.JSONDecodeError:
                         continue
 
@@ -51,19 +199,147 @@ async def flight_computer_background_task():
             flight_comp_ws = None
             await asyncio.sleep(5)
 
+
+# def video_receiver_sync_task():
+#     """Background task to receive video with timestamps and sync with telemetry"""
+#     print("Starting video receiver with telemetry sync...")
+    
+#     # Initialize timestamp receiver
+#     timestamp_receiver = TimestampReceiver(TIMESTAMP_PORT)
+#     timestamp_thread = timestamp_receiver.start_receiving()
+    
+#     # Open video stream
+#     try:
+#         container = av.open(STREAM_URL, options={
+#             'rtbufsize': '100M',
+#             'fflags': 'nobuffer',
+#             'flags': 'low_delay',
+#             'timeout': '10000000'
+#         })
+#         print("✓ Video stream opened successfully")
+#     except Exception as e:
+#         print(f"Failed to open video stream: {e}")
+#         timestamp_receiver.stop_receiving()
+#         return
+    
+#     # Get video stream
+#     video_stream = None
+#     for stream in container.streams:
+#         if stream.type == 'video':
+#             video_stream = stream
+#             print(f"✓ Video: {stream.width}x{stream.height} @ {stream.average_rate} fps")
+#             break
+    
+#     if not video_stream:
+#         print("Error: No video stream found!")
+#         container.close()
+#         timestamp_receiver.stop_receiving()
+#         return
+    
+#     frame_count = 0
+    
+#     try:
+#         for packet in container.demux(video_stream):
+#             try:
+#                 for frame in packet.decode():
+#                     receive_time = time.time()
+                    
+#                     # Get timestamp info for this frame
+#                     timestamp_info = timestamp_receiver.get_timestamp(frame_count)
+                    
+#                     if timestamp_info:
+#                         wall_clock_time = timestamp_info['wall_clock_time']
+#                         timestamp_info['receive_time'] = receive_time
+#                         timestamp_info['latency_ms'] = (receive_time - wall_clock_time) * 1000
+                        
+#                         # Convert frame to JPEG
+#                         img = frame.to_ndarray(format='bgr24')
+#                         success, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                        
+#                         if success:
+#                             jpeg_bytes = buffer.tobytes()
+                            
+#                             # Add to synchronizer with telemetry matching
+#                             timestamped_frame = frame_telemetry_sync.add_frame(
+#                                 frame_count,
+#                                 wall_clock_time,
+#                                 jpeg_bytes
+#                             )
+                            
+#                             # Log sync status
+#                             if frame_count % 60 == 0:  # Every second at 60fps
+#                                 if timestamped_frame.telemetry:
+#                                     sync_diff = timestamped_frame.telemetry.get('sync_time_diff_ms', 'N/A')
+#                                     print(f"Frame {frame_count}: synced with telemetry (diff: {sync_diff:.2f}ms)")
+#                                 else:
+#                                     print(f"Frame {frame_count}: no matching telemetry")
+                            
+#                             # Put frame in queue for AI processor and MJPEG streaming
+#                             try:
+#                                 while not video_frame_queue.empty():
+#                                     video_frame_queue.get_nowait()
+#                                 video_frame_queue.put(jpeg_bytes, block=False)
+#                             except queue.Full:
+#                                 pass
+                    
+#                     frame_count += 1
+                    
+#             except av.error.InvalidDataError as e:
+#                 print(f"Skipping corrupted packet: {e}")
+#                 continue
+                
+#     except KeyboardInterrupt:
+#         print("Video receiver stopped")
+#     except Exception as e:
+#         print(f"Error in video receiver: {e}")
+#         import traceback
+#         traceback.print_exc()
+#     finally:
+#         container.close()
+#         timestamp_receiver.stop_receiving()
+#         timestamp_thread.join(timeout=2)
+#         print("Video receiver task ended")
+
+
+async def video_receiver_background_task():
+    """Async wrapper for video receiver"""
+    loop = asyncio.get_event_loop()
+    
+    # Run the synchronous blocking task in a separate thread executor
+    # Pass the global variables as arguments here
+    await loop.run_in_executor(
+        None, 
+        video_receiver_sync_task, 
+        STREAM_URL, 
+        TIMESTAMP_PORT, 
+        frame_telemetry_sync, 
+        video_frame_queue
+    )
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if (True): # change to false if just testing ai stuff w/o flight computer
-        task = asyncio.create_task(flight_computer_background_task())
+    print("Starting GCS backend server...")
+    tasks = []
+    
+    if True:  # change to false if just testing ai stuff w/o flight computer
+        # Start flight computer telemetry receiver
+        tasks.append(asyncio.create_task(flight_computer_background_task()))
+        
+        # Start video receiver with sync
+        tasks.append(asyncio.create_task(video_receiver_background_task()))
+        
         yield
+        
         # Shutdown
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
     else:
         yield
+
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
@@ -99,100 +375,52 @@ async def send_to_flight_comp(message: dict):
         flight_comp_ws = None
         raise
 
-telemetry_buffer = deque(maxlen=100)
+# # -- Database Endpoints --
+# @app.get("/objects")
+# def get_all_objects_endpoint():
+#     """Retrieve a list of all recorded objects with their classifications and timestamps"""
+#     try:
+#         return get_all_objects()
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=500, detail=f"Failed to retrieve objects: {str(e)}"
+#         )
 
 
-# -- Websocket communication --
-async def handle_telemetry_video_synchronization(message: dict):
-    """
-    Called by  telemetry task.
-    Stores telemetry with its flight controller timestamp.
-    """
-    telemetry_buffer.append(message)
+# @app.delete("/delete/object/{object_id}")
+# def delete_object_endpoint(object_id: str):
+#     """Delete a recorded object from the DynamoDB table by its ID"""
+#     try:
+#         success = delete_object(object_id)
+#         if success:
+#             return {"status": 200}
+#         else:
+#             raise HTTPException(status_code=500, detail="Failed to delete object")
+#     except Exception:
+#         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
 
-def get_synced_telemetry(frame_timestamp):
-    """
-    Finds the telemetry packet closest to the frame's timestamp.
-    """
-    if not telemetry_buffer:
-        return None
+# @app.post("/record")
+# def record(request: dict = Body(...)):
+#     """Record tracked object data"""
+#     data = request.get("data")
+#     if not data:
+#         raise HTTPException(status_code=400, detail="Missing 'data'")
 
-    # Find the packet with the minimum time difference
-    closest_packet = min(
-        telemetry_buffer, key=lambda x: abs(x["last_time"] - frame_timestamp)
-    )
-
-    # If the gap is too large (>200ms), ignore it
-    if abs(closest_packet["last_time"] - frame_timestamp) > 0.2:
-        return None
-
-    return closest_packet
-
-
-# -- Database Endpoints --
-@app.get("/objects")
-def get_all_objects_endpoint():
-    """Retrieve a list of all recorded objects with their classifications and timestamps"""
-    try:
-        return get_all_objects()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve objects: {str(e)}")
-
-@app.delete("/delete/object/{object_id}")
-def delete_object_endpoint(object_id: str):
-    """Delete a recorded object from the DynamoDB table by its ID"""
-    try:
-        success = delete_object(object_id)
-        if success:
-            return {"status": 200}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to delete object")
-    except Exception :
-        raise HTTPException(status_code=500, detail=f"Failed to delete object")
-
-@app.post("/record")
-def record(request: dict = Body(...)):
-    """Record tracked object data"""
-    data = request.get("data")
-    if not data:
-        raise HTTPException(status_code=400, detail="Missing 'data'")
-
-    required_fields = ("timestamp", "latitude", "longitude")
-    # Validate point data
-    for idx, point in enumerate(data):
-        missing = [f for f in required_fields if point.get(f) is None]
-        if missing:
-            raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
-    try:
-        record_telemetry_data(data, classification='Unknown')
-        return {"status": 200, "message": "Data recorded successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
-
-
-async def video_monitor_task():
-    global latest_frame_object
-    cap = setup_video_stream()
-
-    for frame in return_video_stream(cap):
-        # Timestamp the frame the moment it is received
-        frame_time = time.time()
-
-        # Find the telemetry that matches frame based on timestamp
-        synced_data = get_synced_telemetry(frame_time)
-
-        if synced_data:
-            # Pair found!
-            # Attach telemetry as metadata to the frame object
-            frame.metadata = synced_data
-        latest_frame_object = frame
-        # PERFORM FURTHER PROCESSING HERE IF NEEDED
-        await asyncio.sleep(0)
-
-
-# -- Database Endpoints --
-
+#     required_fields = ("timestamp", "latitude", "longitude")
+#     # Validate point data
+#     for idx, point in enumerate(data):
+#         missing = [f for f in required_fields if point.get(f) is None]
+#         if missing:
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail=f"Missing fields {missing} in data point at index {idx}",
+#             )
+#     try:
+#         record_telemetry_data(data, classification="Unknown")
+#         return {"status": 200, "message": "Data recorded successfully"}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
 
 # -- Flight Computer Communication Endpoints --
 @app.post("/setFollowDistance")
@@ -226,9 +454,9 @@ async def stop_following():
         await send_to_flight_comp({"command": "stop_following"})
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
-
-# -- Flight Computer Communication Endpoints --
+        raise HTTPException(
+            status_code=500, detail=f"Failed to stop following: {str(e)}"
+        )
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):
@@ -247,7 +475,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     await send_data_to_connections(data, ai_command_connections)
 
             except json.JSONDecodeError:
-                pass  # Just keep connection alive if not valid JSON
+                pass
 
     except WebSocketDisconnect:
         print(f"Client disconnected.")
@@ -261,16 +489,17 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
 
+
 # -- AI Integration Sockets --
 @app.websocket("/ws/ai-commands")
 async def websocket_ai_commands_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for AI processor to receive frontend commands (clicks, stop, etc.)"""
+    """WebSocket endpoint for AI processor to receive frontend commands"""
     await websocket.accept()
     ai_command_connections.append(websocket)
     print("AI Processor connected to command channel")
     try:
         while True:
-            await websocket.receive_text()  # Keep connection alive
+            await websocket.receive_text()
     except WebSocketDisconnect:
         print("AI Processor disconnected from command channel")
     except Exception as e:
@@ -278,7 +507,8 @@ async def websocket_ai_commands_endpoint(websocket: WebSocket):
     finally:
         if websocket in ai_command_connections:
             ai_command_connections.remove(websocket)
-            
+
+
 @app.websocket("/ws/ai-frame-reader")
 async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
     """ Internal WebSocket endpoint to receive JPEG-encoded frames from the Detector Algorithm """
@@ -310,10 +540,61 @@ async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
 
 @app.websocket("/ws/camera-source")
 async def websocket_camera_source_endpoint(websocket: WebSocket):
-    """Mock camera stream - reads video file and streams frames to AI processor"""
+    """
+    Stream camera frames to AI processor.
+    Uses live video feed if available, otherwise falls back to mock MP4.
+    """
     await websocket.accept()
     print("AI Processor connected to camera source")
-    # Video file path - this mocks the camera feed
+    
+    # Try to use live video feed from the queue
+    use_live_feed = not video_frame_queue.empty() or len(frame_telemetry_sync.frame_buffer) > 0
+    
+    if use_live_feed:
+        print("Using LIVE video feed from drone")
+        await stream_live_feed_to_ai(websocket)
+    else:
+        print("Using MOCK video feed (MP4 file)")
+        await stream_mock_feed_to_ai(websocket)
+
+
+async def stream_live_feed_to_ai(websocket: WebSocket):
+    """Stream live video frames from drone to AI processor"""
+    frame_timeout_count = 0
+    max_timeout = 10  # Switch to mock after 10 consecutive timeouts
+    
+    try:
+        while True:
+            try:
+                # Get frame from queue with short timeout
+                jpeg_bytes = await asyncio.to_thread(video_frame_queue.get, timeout=0.5)
+                
+                # Reset timeout counter on successful frame
+                frame_timeout_count = 0
+                
+                # Send as base64 to AI processor
+                base64_frame = base64.b64encode(jpeg_bytes).decode('utf-8')
+                await websocket.send_text(base64_frame)
+                
+            except queue.Empty:
+                frame_timeout_count += 1
+                
+                # If we haven't received frames for a while, switch to mock
+                if frame_timeout_count >= max_timeout:
+                    print("⚠ Live feed timeout - switching to mock video")
+                    await stream_mock_feed_to_ai(websocket)
+                    break
+                
+                await asyncio.sleep(0.01)
+                
+    except WebSocketDisconnect:
+        print("AI Processor disconnected from live feed")
+    except Exception as e:
+        print(f"Error in live feed: {e}")
+
+
+async def stream_mock_feed_to_ai(websocket: WebSocket):
+    """Stream mock video from MP4 file to AI processor"""
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     VIDEO_PATH = os.path.join(BASE_DIR, "ai_processor", "video.mp4")
     cap = cv2.VideoCapture(VIDEO_PATH)
@@ -327,34 +608,32 @@ async def websocket_camera_source_endpoint(websocket: WebSocket):
         while True:
             ret, frame = cap.read()
 
-            # Loop video when it ends
             if not ret:
+                # Loop video
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ret, frame = cap.read()
                 if not ret:
                     break
 
-            # Encode frame as JPEG
             success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not success:
                 continue
 
-            # Send as base64 string
             base64_frame = base64.b64encode(buffer.tobytes()).decode('utf-8')
             await websocket.send_text(base64_frame)
 
-            # Control frame rate (~30 fps)
+            # Control frame rate (~30 fps for mock)
             await asyncio.sleep(1/30)
 
     except WebSocketDisconnect:
-        print("AI Processor disconnected from camera source")
+        print("AI Processor disconnected from mock feed")
     except Exception as e:
-        print(f"Error in camera source: {e}")
+        print(f"Error in mock feed: {e}")
     finally:
         cap.release()
 
 async def generate_video_frames():
-    """Reads JPEG frames from the queue and formats them for MJPEG streaming."""
+    """Reads JPEG frames from the queue and formats them for MJPEG streaming"""
     frame_boundary = b'--frame\r\n'
     content_type = b'Content-Type: image/jpeg\r\n\r\n'
 
@@ -363,7 +642,6 @@ async def generate_video_frames():
             # 1. Wait for a new frame
             jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=0.5)
 
-            # 2. Yield the MJPEG format
             yield frame_boundary
             yield content_type
             yield jpeg_frame
@@ -377,6 +655,7 @@ async def generate_video_frames():
             print(f"Error yielding frame: {e}")
             break
 
+
 @app.get("/video_feed")
 async def video_feed():
     """Stream video frames via MJPEG"""
@@ -386,5 +665,33 @@ async def video_feed():
         media_type=media_type 
     )
 
+
+@app.get("/sync-stats")
+async def get_sync_stats():
+    """Get synchronization statistics"""
+    total_frames = len(frame_telemetry_sync.frame_buffer)
+    frames_with_telemetry = sum(1 for f in frame_telemetry_sync.frame_buffer if f.telemetry is not None)
+    
+    sync_diffs = [
+        f.telemetry['sync_time_diff_ms'] 
+        for f in frame_telemetry_sync.frame_buffer 
+        if f.telemetry is not None
+    ]
+    
+    stats = {
+        'total_frames': total_frames,
+        'frames_with_telemetry': frames_with_telemetry,
+        'match_rate': (frames_with_telemetry / total_frames * 100) if total_frames > 0 else 0,
+        'telemetry_buffer_size': len(frame_telemetry_sync.telemetry_buffer)
+    }
+    
+    if sync_diffs:
+        stats['avg_sync_diff_ms'] = sum(sync_diffs) / len(sync_diffs)
+        stats['max_sync_diff_ms'] = max(sync_diffs)
+        stats['min_sync_diff_ms'] = min(sync_diffs)
+    
+    return stats
+
+
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=8766, reload=True)
