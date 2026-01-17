@@ -4,12 +4,12 @@ from geographiclib.geodesic import Geodesic
 '''
 AI Helper File:
     - Handles converting bbox information to longitude & latitude
+    - Assumes constant downward-facing (nadir) camera orientation
 
     Parameters:
         uav_longitude - longitude of the center of the image in degrees
         uav_latitude - latitude of the center of the image in degrees
         uav_altitude - altitude of the uav in meters (height above ground)
-        bearing - azimuth angle measured from North clockwise in degrees (drone's heading)
         cam_fov - field of view of the camera in degrees (diagonal FOV)
         img_width_px - width of the image in pixels
         img_height_px - height of the image in pixels
@@ -31,7 +31,7 @@ CAM_FOV = 73.7  # Diagonal field of view in degrees
 IMG_WIDTH_PX = 1456  # Image width in pixels
 IMG_HEIGHT_PX = 1088  # Image height in pixels
 
-def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearing:float, obj_x_px:float, obj_y_px:float):
+def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, obj_x_px:float, obj_y_px:float):
     # Calculate ground coverage area from camera FOV
     cam_fov_rad = math.radians(CAM_FOV)
     # Calculate diagonal distance on ground using FOV and altitude
@@ -53,9 +53,10 @@ def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearin
     dist = math.sqrt(obj_x**2 + obj_y**2)
     
     # Calculate compass bearing to object
+    # Assumes constant downward-facing camera (nadir orientation)
     angle = math.atan2(obj_y_px, obj_x_px)
-    # Adjust for drone's heading and coordinate system differences
-    true_bearing = (bearing + 90 - math.degrees(angle)) % 360
+    # No adjustment for drone heading - camera always points straight down
+    true_bearing = (90 - math.degrees(angle)) % 360
     
     # Calculate object's GPS coordinates while accounting for Earth's curvature
     geod = Geodesic.WGS84

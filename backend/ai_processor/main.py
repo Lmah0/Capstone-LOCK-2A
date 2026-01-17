@@ -68,7 +68,7 @@ def main():
                     obj_x_px = bbox_center_x - image_center_x
                     obj_y_px = bbox_center_y - image_center_y
 
-                    target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
+                    target_lat, target_lon = locate(current_lat, current_lon, current_alt, obj_x_px, obj_y_px)
                     
                     # TODO: Update to send cmds to drone
                     print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")

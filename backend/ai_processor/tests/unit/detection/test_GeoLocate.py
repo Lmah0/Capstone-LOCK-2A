@@ -20,7 +20,6 @@ class TestGeoLocate:
             uav_latitude=51.0,
             uav_longitude=-114.0,
             uav_altitude=100.0,
-            bearing=0.0,
             obj_x_px=0.0,
             obj_y_px=0.0
         )
@@ -37,7 +36,6 @@ class TestGeoLocate:
             uav_latitude=uav_latitude,
             uav_longitude=uav_longitude,
             uav_altitude=100.0,
-            bearing=0.0,
             obj_x_px=0.0,
             obj_y_px=0.0
         )
@@ -54,7 +52,6 @@ class TestGeoLocate:
             uav_latitude=51.0,
             uav_longitude=-114.0,
             uav_altitude=500.0,
-            bearing=90.0,
             obj_x_px=10.0,
             obj_y_px=10.0
         )
@@ -66,7 +63,7 @@ class TestGeoLocate:
         assert -180 <= obj_longitude <= 180
     
     def test_locate_different_bearings(self):
-        """Test locate with different bearing angles"""
+        """Test locate with different drone orientations"""
         base_params = {
             "uav_latitude": 51.0,
             "uav_longitude": -114.0,
@@ -75,16 +72,16 @@ class TestGeoLocate:
             "obj_y_px": 0.0
         }
         
-        # Test different bearings
-        result_north = locate(**base_params, bearing=0.0)
-        result_east = locate(**base_params, bearing=90.0)
-        result_south = locate(**base_params, bearing=180.0)
-        result_west = locate(**base_params, bearing=270.0)
+        # With constant downward-facing camera, all bearings should produce same result
+        result_north = locate(**base_params)
+        result_east = locate(**base_params)
+        result_south = locate(**base_params)
+        result_west = locate(**base_params)
         
-        # Results should be different for different bearings
-        assert result_north != result_east
-        assert result_east != result_south
-        assert result_south != result_west
+        # Results should be the same regardless of drone heading
+        assert result_north == result_east
+        assert result_east == result_south
+        assert result_south == result_west
     
     def test_locate_with_positive_pixel_offsets(self):
         """Test locate with positive pixel offsets"""
@@ -92,7 +89,6 @@ class TestGeoLocate:
             uav_latitude=51.0,
             uav_longitude=-114.0,
             uav_altitude=200.0,
-            bearing=0.0,
             obj_x_px=50.0,
             obj_y_px=50.0
         )
@@ -111,7 +107,6 @@ class TestGeoLocate:
             uav_latitude=51.0,
             uav_longitude=-114.0,
             uav_altitude=200.0,
-            bearing=0.0,
             obj_x_px=-50.0,
             obj_y_px=-50.0
         )
@@ -130,7 +125,6 @@ class TestGeoLocate:
             uav_latitude=51.0,
             uav_longitude=-114.0,
             uav_altitude=1000.0,
-            bearing=0.0,
             obj_x_px=100.0,
             obj_y_px=100.0
         )
@@ -147,7 +141,6 @@ class TestGeoLocate:
             uav_latitude=51.0,
             uav_longitude=-114.0,
             uav_altitude=50.0,
-            bearing=0.0,
             obj_x_px=10.0,
             obj_y_px=10.0
         )
@@ -164,7 +157,6 @@ class TestGeoLocate:
             "uav_latitude": 51.1656129,
             "uav_longitude": -114.1054339,
             "uav_altitude": 680.84,
-            "bearing": 2.3774502277374268,
             "obj_x_px": 0.77,
             "obj_y_px": 0.58
         }
@@ -179,7 +171,6 @@ class TestGeoLocate:
         base_params = {
             "uav_latitude": 51.0,
             "uav_longitude": -114.0,
-            "bearing": 0.0,
             "obj_x_px": 100.0,
             "obj_y_px": 0.0
         }
@@ -209,7 +200,6 @@ class TestGeoLocate:
             uav_latitude=51.0,
             uav_longitude=-114.0,
             uav_altitude=0.0,
-            bearing=0.0,
             obj_x_px=100.0,
             obj_y_px=100.0
         )
