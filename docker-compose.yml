@@ -38,6 +38,7 @@ services:
       - all
     env_file:
       - .env
+      - ./frontend/recording-analysis/.env
     environment:
       NODE_ENV: development
       WATCHPACK_POLLING: "true" 
