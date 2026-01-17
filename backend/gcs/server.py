@@ -405,12 +405,13 @@ async def stream_live_feed_to_ai(websocket: WebSocket):
 
 async def stream_mock_feed_to_ai(websocket: WebSocket):
     """Stream mock video from MP4 file to AI processor"""
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    VIDEO_PATH = os.path.join(BASE_DIR, "ai_processor", "video.mp4")
+    BASE_DIR = os.path.dirname(__file__)  # the directory where server.py lives
+    VIDEO_PATH = os.path.join(BASE_DIR, "video.mp4")
     cap = cv2.VideoCapture(VIDEO_PATH)
 
     if not cap.isOpened():
         print(f"Error: Could not open video file at {VIDEO_PATH}")
+        await asyncio.sleep(5)  # Wait before allowing reconnect
         await websocket.close()
         return
 
