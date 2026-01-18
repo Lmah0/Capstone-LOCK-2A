@@ -1,15 +1,4 @@
 services:
-# --- Base Image for backend ---
-  backend-base-image:
-    image: backend-base-image:latest
-    build:
-      context: .
-      dockerfile: docker/base/Dockerfile.python-base
-    profiles:
-      - all
-      - gcs
-      - recording-analysis
-
 # --- Frontend ---
   frontend-gcs:
     build:
@@ -92,7 +81,6 @@ services:
       - app-network
     restart: unless-stopped
     depends_on:
-      - backend-base-image
       - ai-processor
   
   backend-recording-analysis:
@@ -116,8 +104,6 @@ services:
       - "${RECORDING_ANALYSIS_BACKEND_PORT}:${RECORDING_ANALYSIS_BACKEND_PORT}"
     networks:
       - app-network
-    depends_on:
-      - backend-base-image
     restart: unless-stopped
 
   ai-processor:
@@ -140,8 +126,6 @@ services:
       - ./backend/ai_processor/models:/app/models:ro
     networks:
       - app-network
-    depends_on:
-      - backend-base-image
     restart: unless-stopped
 
   rpi-flight-computer:
@@ -163,8 +147,6 @@ services:
       - "${RPI_BACKEND_PORT}:${RPI_BACKEND_PORT}"
     networks:
       - app-network
-    depends_on:
-      - backend-base-image
     restart: unless-stopped
 
 networks:
