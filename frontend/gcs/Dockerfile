@@ -1,11 +1,13 @@
 # Dockerfile for GCS Frontend (Next.js)
 FROM node:24-alpine
 
+ARG GCS_FRONTEND_PORT
+
 # Set working directory
 WORKDIR /app
 
 # Copy package files
-COPY frontend/gcs/package*.json ./
+COPY package*.json ./
 
 # Install dependencies
 RUN npm ci
@@ -14,7 +16,7 @@ RUN npm ci
 # Source: C:\Users\Eric\...\frontend\gcs\*
 # Destination: /app/ (in container)
 # We copy the content bc Docker doesnt have access to git folder
-COPY frontend/gcs ./
+COPY . .
 
 # Expose port
 EXPOSE ${GCS_FRONTEND_PORT}

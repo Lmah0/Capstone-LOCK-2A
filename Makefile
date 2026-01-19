@@ -34,7 +34,7 @@ all: check-base
 	docker compose --profile all up -d
 
 down:
-	docker compose --profile all down -v
+	docker compose --profile all down
 
 clean: # Only run this if you want to remove everything
 	docker compose --profile all down --rmi local --volumes --remove-orphans
