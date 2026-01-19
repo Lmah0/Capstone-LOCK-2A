@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Copy all other files from your backend folder
 # We copy the content bc Docker doesnt have access to git folder
-COPY backend/gcs ./
+COPY . .
 
 # Expose the backend port (value from .env)
 EXPOSE ${GCS_BACKEND_PORT}
