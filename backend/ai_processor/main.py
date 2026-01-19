@@ -7,7 +7,7 @@ import AiStreamClient
 
 # Global Vars
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'models', 'yolo11n.pt')
+MODEL_PATH = os.path.join(BASE_DIR, 'models', 'yolo11n-seg.pt')
 
 def handle_stop_tracking(): #TODO
     pass
