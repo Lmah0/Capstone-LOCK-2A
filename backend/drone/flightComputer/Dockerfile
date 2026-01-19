@@ -6,7 +6,7 @@ FROM backend-base-image:latest
 # Set working directory
 WORKDIR /app
 # Copy application code
-COPY backend/drone/flightComputer ./
+COPY . .
 
 # Expose the backend port (value from .env)
 EXPOSE ${RPI_BACKEND_PORT}

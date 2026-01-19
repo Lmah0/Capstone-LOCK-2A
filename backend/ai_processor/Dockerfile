@@ -7,7 +7,7 @@ FROM backend-base-image:latest
 WORKDIR /app
 
 # Copy application source code
-COPY backend/ai_processor ./
+COPY . .
 
 # Create startup script (in /usr/local/bin so volume mount doesn't overwrite it)
 RUN printf '#!/bin/bash\nset -e\ncd /app\npython main.py\n' > /usr/local/bin/start.sh \
