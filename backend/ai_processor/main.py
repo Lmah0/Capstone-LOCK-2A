@@ -8,6 +8,7 @@ import AiStreamClient
 # Global Vars
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'yolo11n-seg.pt')
+VIDEO_PATH = os.path.join(BASE_DIR, 'video.mp4')
 
 def handle_stop_tracking(): #TODO
     pass
@@ -19,12 +20,18 @@ def handle_reselect_object(): #TODO
 def main():
     try:
         frame_count = 0
+
+        # Init Video
+        if not AiStreamClient.init(VIDEO_PATH):
+            print("Failed to initialize video capture")
+            return
+
         AiStreamClient.initialize()
         engine = TrackingEngine(MODEL_PATH)
 
         while True: 
             # Waiting for video stream to start
-            frame = AiStreamClient.get_current_frame()
+            frame = AiStreamClient.get_frame()
             if frame is None:
                 time.sleep(0.01)
                 continue
@@ -118,8 +125,8 @@ def main():
                                     engine.start_tracking(frame, bbox, class_id)
                                     print(f"Started tracking object at ({click_x}, {click_y})")
                                     break
-
-            AiStreamClient.send_frame(output_frame) # Always send frame to frontend
+                                
+            AiStreamClient.push_frame(output_frame) # Always send frame to frontend
             time.sleep(0.01) # Small delay to prevent CPU overload
     
     except Exception as e:
