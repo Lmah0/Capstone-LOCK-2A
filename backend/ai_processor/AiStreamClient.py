@@ -15,7 +15,6 @@ import threading
 import time
 import json
 import numpy as np
-import fractions
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,7 +44,7 @@ class RTCOffer(BaseModel):
 
 # URLs
 BACKEND_PORT = os.getenv('GCS_BACKEND_PORT')
-WEBRTC_PORT = os.getenv('WEBRTC_PORT')
+WEBRTC_PORT = int(os.getenv("WEBRTC_PORT", 8767))
 COMMAND_WS_URL = f"ws://backend-gcs:{BACKEND_PORT}/ws/ai-commands"
 
 # Global state 
