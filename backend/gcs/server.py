@@ -9,7 +9,7 @@ import websockets
 from contextlib import asynccontextmanager
 from typing import List
 import os
-# from database import get_all_objects, delete_object, record_telemetry_data
+from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
 import queue
 import base64
@@ -49,7 +49,7 @@ async def flight_computer_background_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if (False): # change to false if just testing ai stuff w/o flight computer
+    if (True): # change to false if just testing ai stuff w/o flight computer
         task = asyncio.create_task(flight_computer_background_task())
         yield
         # Shutdown
@@ -97,7 +97,6 @@ async def send_to_flight_comp(message: dict):
 # -- Database Endpoints --
 @app.get("/objects")
 def get_all_objects_endpoint():
-    return {}
     """Retrieve a list of all recorded objects with their classifications and timestamps"""
     try:
         return get_all_objects()
@@ -106,7 +105,6 @@ def get_all_objects_endpoint():
 
 @app.delete("/delete/object/{object_id}")
 def delete_object_endpoint(object_id: str):
-    return {}
     """Delete a recorded object from the DynamoDB table by its ID"""
     try:
         success = delete_object(object_id)
@@ -119,7 +117,6 @@ def delete_object_endpoint(object_id: str):
 
 @app.post("/record")
 def record(request: dict = Body(...)):
-    return {}
     """Record tracked object data"""
     data = request.get("data")
     if not data:
