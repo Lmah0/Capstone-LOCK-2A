@@ -8,14 +8,14 @@ Handles:
 """
 
 import asyncio
-import json
+import websockets
 import cv2
+import os
+import threading
+import time
+import json
 import numpy as np
 import fractions
-import time
-import threading
-import os
-import websockets
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,9 +37,11 @@ _app.add_middleware(
     allow_headers=["*"],
 )
 
+# Class obj used to match the return JSON from frontend
+# Offer/answer is the connection request - the video streaming begins when both sides agree
 class RTCOffer(BaseModel):
-    sdp: str
-    type: str
+    sdp: str #Text format that describes media session
+    type: str # "offer" (from frontend) or "answer" (from backend)
 
 # URLs
 BACKEND_PORT = os.getenv('GCS_BACKEND_PORT')
@@ -81,7 +83,7 @@ def _start_event_loop():
     _main_loop.run_forever()
 
 def initialize():
-    """Init. Establishes AI Command WebSocket connection, WebRTC server, and mocked cv2 video."""
+    """Init. Establishes AI Command WebSocket connection and WebRTC server"""
     global _main_thread
 
     if _main_thread is not None:
@@ -195,15 +197,14 @@ class AIVideoStreamTrack(VideoStreamTrack):
 
     def __init__(self):
         super().__init__()
-        self._start = None  # Add this line - parent class should set it but isn't
-        self._timestamp = 0
-        self._time_base = fractions.Fraction(1, 30)
+        self._start = None # Used internally by parent class of when streaming started
 
     async def recv(self):
         try:
             if self._start is None:
                 self._start = time.time()
 
+            # Pts = presentation timestamp which is the frame number
             pts, time_base = await self.next_timestamp()
 
             frame = _get_output_frame()
@@ -211,8 +212,13 @@ class AIVideoStreamTrack(VideoStreamTrack):
             if frame is None: # If no frame is avaliable send a black screen
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
+            # Convert BGR (OpenCV format) to RGB (WebRTC format)
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # Wrap numpy array in a VideoFrame object for aiortc
             video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
+            
+             # Attach timing info so client knows when to display this frame
             video_frame.pts = pts
             video_frame.time_base = time_base
 
@@ -224,7 +230,7 @@ class AIVideoStreamTrack(VideoStreamTrack):
 
 
 def _get_output_frame():
-    """Get the latest output frame (thread-safe)."""
+    """Get the latest output frame"""
     global _output_frame
     with _output_frame_lock:
         if _output_frame is None:
@@ -233,17 +239,14 @@ def _get_output_frame():
 
 
 def push_frame(frame: np.ndarray):
-    """
-    Push a processed frame to be streamed via WebRTC.
-    Call this from your main processing loop.
-    """
+    """Push a processed frame to be streamed via WebRTC"""
     global _output_frame
     with _output_frame_lock:
         _output_frame = frame.copy()
 
 @_app.post("/offer")
 async def handle_offer(offer: RTCOffer):
-    """Handle WebRTC offer from frontend and return answer."""
+    """Endpoint that handles WebRTC offer from frontend and return answer"""
     rtc_offer = RTCSessionDescription(sdp=offer.sdp, type=offer.type)
 
     pc = RTCPeerConnection()
@@ -261,15 +264,16 @@ async def handle_offer(offer: RTCOffer):
     video_track = AIVideoStreamTrack()
     pc.addTrack(video_track)
 
+    # Process the offer from frontend and create an answer
     await pc.setRemoteDescription(rtc_offer)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
+    # Frontend will use this to complete the connection
     return {
         "sdp": pc.localDescription.sdp,
         "type": pc.localDescription.type
     }
-
 
 async def _start_webrtc_server():
     """Start the WebRTC signaling server using uvicorn."""
