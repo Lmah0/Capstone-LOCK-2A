@@ -52,7 +52,6 @@ _main_thread = None
 
 # Video Input (CV2)
 _video_capture = None
-_video_path = None
 _video_lock = threading.Lock()
 
 # WebRTC Video
@@ -196,24 +195,32 @@ class AIVideoStreamTrack(VideoStreamTrack):
 
     def __init__(self):
         super().__init__()
+        self._start = None  # Add this line - parent class should set it but isn't
         self._timestamp = 0
         self._time_base = fractions.Fraction(1, 30)
 
     async def recv(self):
-        """Return the next video frame to be sent over WebRTC."""
-        pts, time_base = await self.next_timestamp()
+        try:
+            if self._start is None:
+                self._start = time.time()
 
-        frame = _get_output_frame()
+            pts, time_base = await self.next_timestamp()
 
-        if frame is None:
-            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            frame = _get_output_frame()
 
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
-        video_frame.pts = pts
-        video_frame.time_base = time_base
+            if frame is None: # If no frame is avaliable send a black screen
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
-        return video_frame
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
+            video_frame.pts = pts
+            video_frame.time_base = time_base
+
+            return video_frame
+
+        except Exception as e:
+            print(f"WebRTC recv ERROR: {e}")
+            raise
 
 
 def _get_output_frame():
@@ -244,8 +251,10 @@ async def handle_offer(offer: RTCOffer):
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
-        print(f"WebRTC connection state: {pc.connectionState}")
-        if pc.connectionState == "failed" or pc.connectionState == "closed":
+        state = pc.connectionState
+        if state in ("connected", "failed", "closed"):
+            print(f"WebRTC connection state: {state}")
+        if state == "failed" or state == "closed":
             await pc.close()
             _peer_connections.discard(pc)
 
@@ -269,7 +278,7 @@ async def _start_webrtc_server():
     config = uvicorn.Config(
         _app,
         host="0.0.0.0",
-        port=WEBRTC_PORT,
+        port=int(WEBRTC_PORT),
         log_level="warning"
     )
     _server = uvicorn.Server(config)
@@ -286,13 +295,8 @@ async def _stop_webrtc_server():
 # Video Input (Mocked video stream)
 def init(video_path: str = None) -> bool:
     """Initialize mocked video"""
-    global _video_capture, _video_path
+    global _video_capture
 
-    if video_path is None:
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        video_path = os.path.join(BASE_DIR, "video.mp4")
-
-    _video_path = video_path
     _video_capture = cv2.VideoCapture(video_path)
 
     if not _video_capture.isOpened():
@@ -312,13 +316,13 @@ def get_frame():
     with _video_lock:
         ret, frame = _video_capture.read()
 
-        if not ret:
+        if not ret: # Loop the video if we've reached the end
             _video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             ret, frame = _video_capture.read()
             if not ret:
                 return None
 
-        return frame
+        return frame.copy()
 
 def _release_video():
     """Release the video capture resource."""

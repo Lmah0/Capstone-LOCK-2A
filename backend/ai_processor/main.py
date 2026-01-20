@@ -23,7 +23,6 @@ def main():
 
         # Init Video
         if not AiStreamClient.init(VIDEO_PATH):
-            print("Failed to initialize video capture")
             return
 
         AiStreamClient.initialize()
@@ -78,7 +77,7 @@ def main():
                     target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
                     
                     # TODO: Update to send cmds to drone
-                    print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
+                    # print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
                 else:
                     print("Tracking Lost")
 
@@ -108,7 +107,6 @@ def main():
                             # User clicked on the hovered object
                             class_id = int(results.boxes.cls[hover_index])
                             engine.start_tracking(frame, hover_box, class_id)
-                            print(f"Started tracking object at ({click_x}, {click_y})")
                         else:
                             # Fallback: find which detection was clicked
                             boxes = results.boxes.xyxy.cpu().numpy()
@@ -123,7 +121,6 @@ def main():
                                     bbox = (x1, y1, x2 - x1, y2 - y1)
                                     class_id = int(classes[i])
                                     engine.start_tracking(frame, bbox, class_id)
-                                    print(f"Started tracking object at ({click_x}, {click_y})")
                                     break
                                 
             AiStreamClient.push_frame(output_frame) # Always send frame to frontend

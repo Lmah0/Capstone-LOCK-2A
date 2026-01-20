@@ -27,6 +27,8 @@ export default function VideoFeed() {
             setConnectionState('connecting');
 
             // Create peer connection
+            // STUN server used by WebRTC to discover the client's public IP/port
+            // Used ICE so peers can establish a direct connection through NATs/firewalls
             const pc = new RTCPeerConnection({
                 iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
             });
@@ -49,7 +51,12 @@ export default function VideoFeed() {
             pc.ontrack = (event) => {
                 if (videoRef.current && event.streams[0]) {
                     videoRef.current.srcObject = event.streams[0];
-                    setIsStreaming(true);
+                    videoRef.current.play().then(() => {
+                        setIsStreaming(true);
+                    }).catch((err) => {
+                        console.error('Video play failed:', err);
+                        setIsStreaming(true);
+                    });
                 }
             };
 
@@ -122,22 +129,19 @@ export default function VideoFeed() {
             try {
                 const ws = new WebSocket(gcsServerUrl);
 
-                ws.onopen = () => {
-                    console.log('Command WebSocket connected');
-                };
+                ws.onopen = () => {};
 
                 ws.onclose = () => {
-                    console.log('Command WebSocket disconnected, reconnecting...');
                     setTimeout(connectWebSocket, 3000);
                 };
 
                 ws.onerror = (error) => {
-                    console.error('Command WebSocket error:', error);
+                    console.error('WebSocket error:', error);
                 };
 
                 wsRef.current = ws;
             } catch (error) {
-                console.error('Failed to connect command WebSocket:', error);
+                console.error('WebSocket connection failed:', error);
                 setTimeout(connectWebSocket, 3000);
             }
         };
@@ -210,7 +214,6 @@ export default function VideoFeed() {
         }));
 
         setIsTracking(true);
-        console.log(`Clicked at (${actualX}, ${actualY})`);
     }, []);
 
     // Stop tracking
@@ -222,7 +225,6 @@ export default function VideoFeed() {
         }));
 
         setIsTracking(false);
-        console.log('Stopped tracking');
     };
 
     // Reselect object
@@ -234,7 +236,6 @@ export default function VideoFeed() {
         }));
 
         setIsTracking(false);
-        console.log('Reselect object');
     };
 
     return (
@@ -258,6 +259,7 @@ export default function VideoFeed() {
                         className={`absolute inset-0 w-full h-full object-cover cursor-crosshair ${isStreaming ? 'opacity-100' : 'opacity-50'}`}
                         onMouseMove={handleMouseMove}
                         onClick={handleClick}
+                        onError={(e) => console.error('Video error:', e)}
                     />
                 )}
 
@@ -267,7 +269,7 @@ export default function VideoFeed() {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span className="ml-3 text-white">Connecting to WebRTC stream...</span>
+                        <span className="ml-3 text-white">Connecting to video stream...</span>
                         <span className="ml-2 text-xs text-gray-400">({connectionState})</span>
                     </div>
                 )}
