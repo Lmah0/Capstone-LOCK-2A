@@ -15,14 +15,18 @@ HISTORY_SIZE = 3             # Frames of consistency before realignment
 class TrackingEngine:
     def __init__(self, model_path):
         if not os.path.exists(model_path):
-            print(f"Warning: Model not found at {model_path}")
-            print("YOLO will attempt to download the model...")
+            print(f"YOLO model not found at '{model_path}'.Downloading Model.")
         else:
-            print(f"Loading model from: {model_path}")
+            print(f"Loading YOLO model from '{model_path}'.")
 
-        self.model = YOLO(model_path)
-        self.tracker = cv2.TrackerCSRT.create()
-        
+        try:
+            self.model = YOLO(model_path)
+            self.tracker = cv2.TrackerCSRT.create()
+            print("YOLO model and tracker initialized.")
+        except Exception as e:
+            print(f"Initialization failed: {e}")
+            raise
+
         # State
         self.is_tracking = False
         self.tracked_bbox = None
