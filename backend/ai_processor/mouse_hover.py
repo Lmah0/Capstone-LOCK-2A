@@ -196,7 +196,7 @@ while cap.isOpened():
 
                     # Click = start tracking
                     if click_flag:
-                        tracker = cv2.legacy.TrackerCSRT_create()
+                        tracker = cv2.TrackerCSRT.create()
                         tracker.init(frame, (x1, y1, x2 - x1, y2 - y1))
                         tracked_class = int(classes[i])
                         tracked_bbox = (x1, y1, x2 - x1, y2 - y1)
