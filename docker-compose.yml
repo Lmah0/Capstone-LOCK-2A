@@ -114,6 +114,7 @@ services:
     environment:
       PYTHONUNBUFFERED: 1
       WATCHFILES_FORCE_POLLING: "true"
+      BACKEND_GCS_HOST: backend-gcs
     volumes:
       - ./backend/ai_processor:/app
       # host_path : container_path : options, ro makes this volume read only so it cant update or change the AI-Models.pt
