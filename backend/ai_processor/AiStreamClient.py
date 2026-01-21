@@ -22,9 +22,10 @@ load_dotenv(dotenv_path="../../.env")
 
 # WebSocket URLs
 BACKEND_PORT =  os.getenv('GCS_BACKEND_PORT', '8766')
-CAMERA_WS_URL = f"ws://backend-gcs:{BACKEND_PORT}/ws/camera-source"
-COMMAND_WS_URL = f"ws://backend-gcs:{BACKEND_PORT}/ws/ai-commands"
-FRAME_SENDER_WS_URL = f"ws://backend-gcs:{BACKEND_PORT}/ws/ai-frame-reader"
+BACKEND_HOST = os.getenv('BACKEND_GCS_HOST', 'localhost')  # 'backend-gcs' in Docker, 'localhost' locally
+CAMERA_WS_URL = f"ws://{BACKEND_HOST}:{BACKEND_PORT}/ws/camera-source"
+COMMAND_WS_URL = f"ws://{BACKEND_HOST}:{BACKEND_PORT}/ws/ai-commands"
+FRAME_SENDER_WS_URL = f"ws://{BACKEND_HOST}:{BACKEND_PORT}/ws/ai-frame-reader"
 
 # Global state
 _loop = None # async event loop controller, manages the websocket sending
