@@ -1,0 +1,25 @@
+# Dependency folders
+**/node_modules
+**/bower_components
+
+# Build outputs - These are generated inside the container
+**/.next
+**/out
+**/build
+**/dist
+
+# Version control
+.git
+.gitignore
+
+# Debug logs and local OS files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore

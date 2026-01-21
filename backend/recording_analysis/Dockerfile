@@ -7,7 +7,7 @@ FROM backend-base-image:latest
 WORKDIR /app
 
 # Copy application code
-COPY backend/recording_analysis ./
+COPY . .
 
 # Expose the backend port
 EXPOSE ${RECORDING_ANALYSIS_BACKEND_PORT}

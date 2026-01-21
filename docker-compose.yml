@@ -2,8 +2,10 @@ services:
 # --- Frontend ---
   frontend-gcs:
     build:
-      context: .
-      dockerfile: ./frontend/gcs/Dockerfile
+      context: ./frontend/gcs
+      dockerfile: Dockerfile
+      args: # arguments used during build-time only to pass in variables to dockerfiles
+        GCS_FRONTEND_PORT: ${GCS_FRONTEND_PORT}
     container_name: frontend-gcs
     profiles: # Profiles are used to choose what we want to startup
       - gcs
@@ -13,12 +15,10 @@ services:
     environment:
       NODE_ENV: development
       WATCHPACK_POLLING: "true" # for hot-reloads to work
-      NEXT_PUBLIC_BACKEND_URL: http://backend-gcs:${GCS_BACKEND_PORT}  # Use service name for internal networking
-      PORT: ${GCS_FRONTEND_PORT} # App listens on this port inside container
     volumes:
       - ./frontend/gcs:/app # binding mount for hot-reloads
-      - /app/node_modules # Prevents host OS from overwriting container-installed deps
-      - /app/.next # Prevents rebuild cache issues
+      - gcs-node-modules:/app/node_modules # Named volume preserves deps across rebuilds
+      - gcs-next:/app/.next # Named volume preserves build cache
     networks: 
       - app-network # DNS-based access to other containers on that same network
     ports:
@@ -30,24 +30,24 @@ services:
 
   frontend-recording-analysis:
     build:
-      context: .
-      dockerfile: ./frontend/recording_analysis/Dockerfile
+      context: ./frontend/recording_analysis
+      dockerfile: Dockerfile
+      args: 
+        RECORDING_ANALYSIS_FRONTEND_PORT: ${RECORDING_ANALYSIS_FRONTEND_PORT}
     container_name: frontend-recording-analysis
     profiles:
       - recording-analysis
       - all
     env_file:
       - .env
-      - ./frontend/recording-analysis/.env
+      - ./frontend/recording_analysis/.env
     environment:
       NODE_ENV: development
       WATCHPACK_POLLING: "true" 
-      NEXT_PUBLIC_BACKEND_URL: http://backend-recording-analysis:${RECORDING_ANALYSIS_BACKEND_PORT}
-      PORT: ${RECORDING_ANALYSIS_FRONTEND_PORT}
     volumes:
       - ./frontend/recording_analysis:/app 
-      - /app/node_modules 
-      - /app/.next 
+      - recording-analysis-node-modules:/app/node_modules
+      - recording-analysis-next:/app/.next
     networks: 
       - app-network
     ports:
@@ -59,8 +59,8 @@ services:
 # --- Backend ---
   backend-gcs:
     build:
-      context: .
-      dockerfile: ./backend/gcs/Dockerfile
+      context: ./backend/gcs
+      dockerfile: Dockerfile
     container_name: backend-gcs
     profiles:
       - gcs
@@ -68,10 +68,7 @@ services:
     env_file:
       - .env
     environment:
-      PYTHONUNBUFFERED: 1 # used for flushing out stdout immediately as to have logs/print statements appear in real time
-      GCS_BACKEND_PORT: ${GCS_BACKEND_PORT}
-      GCS_FRONTEND_PORT: ${GCS_FRONTEND_PORT}
-      FLIGHT_COMP_URL: ${FLIGHT_COMP_URL}    
+      PYTHONUNBUFFERED: 1 # used for flushing out stdout immediately as to have logs/print statements appear in real time 
       WATCHFILES_FORCE_POLLING: "true" # for hot-reloads to work in Docker
     volumes:
       - ./backend/gcs:/app
@@ -85,8 +82,8 @@ services:
   
   backend-recording-analysis:
     build:
-      context: .
-      dockerfile: ./backend/recording_analysis/Dockerfile
+      context: ./backend/recording_analysis
+      dockerfile: Dockerfile
     container_name: backend-recording-analysis
     profiles:
       - recording-analysis
@@ -95,8 +92,6 @@ services:
       - .env
     environment:
       PYTHONUNBUFFERED: 1 
-      RECORDING_ANALYSIS_BACKEND_PORT: ${RECORDING_ANALYSIS_BACKEND_PORT}
-      RECORDING_ANALYSIS_FRONTEND_PORT: ${RECORDING_ANALYSIS_FRONTEND_PORT}
       WATCHFILES_FORCE_POLLING: "true"
     volumes:
       - ./backend/recording_analysis:/app
@@ -108,8 +103,8 @@ services:
 
   ai-processor:
     build:
-      context: .
-      dockerfile: ./backend/ai_processor/Dockerfile
+      context: ./backend/ai_processor
+      dockerfile: Dockerfile
     container_name: ai-processor
     profiles:
       - gcs
@@ -118,7 +113,6 @@ services:
       - .env
     environment:
       PYTHONUNBUFFERED: 1
-      GCS_BACKEND_PORT: ${GCS_BACKEND_PORT}
       WATCHFILES_FORCE_POLLING: "true"
     volumes:
       - ./backend/ai_processor:/app
@@ -130,8 +124,8 @@ services:
 
   rpi-flight-computer:
     build:
-      context: .
-      dockerfile: ./backend/drone/flightComputer/Dockerfile
+      context: ./backend/drone/flightComputer
+      dockerfile: Dockerfile
     container_name: rpi-flight-computer
     profiles:
       - all
@@ -139,7 +133,6 @@ services:
       - .env
     environment:
       PYTHONUNBUFFERED: 1
-      RPI_BACKEND_PORT: ${RPI_BACKEND_PORT}
       WATCHFILES_FORCE_POLLING: "true"
     volumes:
       - ./backend/drone/flightComputer:/app
@@ -152,3 +145,11 @@ services:
 networks:
   app-network: # Defines a custom Docker network so containers can connect to it
     driver: bridge # Use Docker's default local "bridge" networking driver
+
+# Uses named volumes for node_modules and .next to prevent host-container dependency 
+# stored for high-performance persistence, isolated from host OS file systems.
+volumes:
+  gcs-node-modules:
+  gcs-next:
+  recording-analysis-node-modules:
+  recording-analysis-next:
