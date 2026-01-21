@@ -1,10 +1,11 @@
 import cv2
 import numpy as np
-from ultralytics import YOLO
 import os
 import time
 from collections import deque
 import argparse
+
+from AIEngine import TrackingConfig
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Interactive object detection and tracking')
@@ -20,27 +21,8 @@ VIDEO_PATH = os.path.join(script_dir, "../gcs/video.mp4")
 # VIDEO_PATH = '/Users/lionelhasan/Downloads/Trimmed Angle.mp4'
 MODEL_PATH = os.path.join(script_dir, "models", "yolo11n.pt")
 
-
-# Tracking mode selection
-# Options: "drift_detection" or "tracking_only"
-# - drift_detection: Continuously re-detects with YOLO to check for drift and realign
-# - tracking_only: Pure tracker after object is selected, detector stops running
-TRACKING_MODE = "tracking_only"
-
-# Detection frame skipping (during initial selection phase)
-# 0 = process every frame, 1 = process every 2nd frame, 2 = process every 3rd frame, etc.
-DETECTION_FRAME_SKIP = 2  # Process every 3rd frame during detection phase
-# Tracker frame skipping (during tracking phase)
-# 0 = process every frame, 1 = process every 2nd frame, 2 = process every 3rd frame, etc.
-TRACKER_FRAME_SKIP = 1  # Process every frame (set to 1 for 2x speedup, reuse last position)
-# Tracking parameters
-REDETECT_INTERVAL = 10  # Re-run detector every 10 frames (only used in drift_detection mode)
-IOU_THRESHOLD = 0.5     # Higher threshold - more conservative realignment
-DETECTION_HISTORY_SIZE = 3  # Require consistency across N frames
-CONFIDENCE_THRESHOLD = 0.1  # Minimum confidence for YOLO detections
-MODEL_IOU = 0.5  # NMS IOU threshold - higher = faster (fewer boxes to process)
-
 # Load YOLO detection model (bounding box only)
+from ultralytics import YOLO
 model = YOLO(MODEL_PATH)
 cap = cv2.VideoCapture(VIDEO_PATH)
 
@@ -132,7 +114,7 @@ def print_performance_stats():
     
     print("\n" + "="*60)
     print(f"Performance Statistics (last {len(frame_times)} frames)")
-    print(f"Tracking Mode: {TRACKING_MODE}")
+    print(f"Tracking Mode: {TrackingConfig.TRACKING_MODE}")
     print(f"Currently Tracking: {tracking}")
     print(f"FPS: {fps:.2f}")
     print("="*60 + "\n")
@@ -157,12 +139,12 @@ while cap.isOpened():
     if not tracking:
         # --- RUN DETECTION (Bounding Box Only) ---
         # Skip frames to speed up initial detection phase
-        should_run_detection = (frame_count % (DETECTION_FRAME_SKIP + 1)) == 0
+        should_run_detection = (frame_count % (TrackingConfig.DETECTION_FRAME_SKIP + 1)) == 0
         
         if should_run_detection:
             if COLLECT_STATS:
                 detection_start = time.time()
-            results = model.predict(frame, conf=CONFIDENCE_THRESHOLD, iou=MODEL_IOU, verbose=False)
+            results = model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD, iou=TrackingConfig.MODEL_IOU, verbose=False)
             if COLLECT_STATS:
                 detection_time = (time.time() - detection_start) * 1000  # Convert to ms
                 detection_times.append(detection_time)
@@ -209,7 +191,7 @@ while cap.isOpened():
     else:
         # --- TRACKING MODE ---
         # Skip frames to speed up tracking phase
-        should_run_tracker = (frame_count % (TRACKER_FRAME_SKIP + 1)) == 0
+        should_run_tracker = (frame_count % (TrackingConfig.TRACKER_FRAME_SKIP + 1)) == 0
         
         if should_run_tracker:
             if COLLECT_STATS:
@@ -241,13 +223,13 @@ while cap.isOpened():
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
 
             # --- PERIODIC RE-DETECTION (Hybrid Approach) - Only in drift_detection mode ---
-            if TRACKING_MODE == "drift_detection" and frame_count % REDETECT_INTERVAL == 0:
+            if TrackingConfig.TRACKING_MODE == "drift_detection" and frame_count % TrackingConfig.REDETECT_INTERVAL == 0:
                 # Get tracker confidence
                 if COLLECT_STATS:
                     redetect_start = time.time()
                 tracker_confidence = get_tracker_confidence(tracker, frame, tracked_bbox)
 
-                results = model.predict(frame, conf=CONFIDENCE_THRESHOLD, iou=MODEL_IOU, verbose=False)
+                results = model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD, iou=TrackingConfig.MODEL_IOU, verbose=False)
                 if COLLECT_STATS:
                     redetect_time = (time.time() - redetect_start) * 1000  # Convert to ms
                     redetection_times.append(redetect_time)
@@ -281,15 +263,15 @@ while cap.isOpened():
                             detection_history.append(None)
 
                         # Keep only recent history
-                        if len(detection_history) > DETECTION_HISTORY_SIZE:
+                        if len(detection_history) > TrackingConfig.DETECTION_HISTORY_SIZE:
                             detection_history.pop(0)
 
                         # Check if we have consistent detections
-                        if len(detection_history) >= DETECTION_HISTORY_SIZE:
+                        if len(detection_history) >= TrackingConfig.DETECTION_HISTORY_SIZE:
                             # Count how many non-None detections we have
                             valid_detections = [d for d in detection_history if d is not None]
 
-                            if len(valid_detections) >= DETECTION_HISTORY_SIZE - 1:
+                            if len(valid_detections) >= TrackingConfig.DETECTION_HISTORY_SIZE - 1:
                                 # Average the recent detections for stability
                                 avg_x = np.mean([d[0] for d in valid_detections])
                                 avg_y = np.mean([d[1] for d in valid_detections])
@@ -300,7 +282,7 @@ while cap.isOpened():
                                 # Check IoU with current tracker position
                                 final_iou = calculate_iou(tracked_bbox, smoothed_bbox)
 
-                                if final_iou > IOU_THRESHOLD:
+                                if final_iou > TrackingConfig.IOU_THRESHOLD:
                                     tracker = cv2.legacy.TrackerCSRT_create()
                                     tracker.init(frame, smoothed_bbox)
                                     tracked_bbox = smoothed_bbox
