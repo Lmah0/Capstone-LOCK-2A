@@ -44,8 +44,10 @@ class RTCOffer(BaseModel):
 
 # URLs
 BACKEND_PORT = os.getenv('GCS_BACKEND_PORT')
+BACKEND_HOST = os.getenv('BACKEND_GCS_HOST', 'localhost')  # 'backend-gcs' in Docker, 'localhost' locally
 WEBRTC_PORT = int(os.getenv("WEBRTC_PORT", 8767))
-COMMAND_WS_URL = f"ws://backend-gcs:{BACKEND_PORT}/ws/ai-commands"
+
+COMMAND_WS_URL = f"ws://{BACKEND_HOST}:{BACKEND_PORT}/ws/ai-commands"
 
 # Global state 
 _main_loop = None
