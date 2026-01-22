@@ -1,0 +1,157 @@
+services:
+# --- Frontend ---
+  frontend-gcs:
+    build:
+      context: ./frontend/gcs
+      dockerfile: Dockerfile
+      args: # arguments used during build-time only to pass in variables to dockerfiles
+        GCS_FRONTEND_PORT: ${GCS_FRONTEND_PORT}
+    container_name: frontend-gcs
+    profiles: # Profiles are used to choose what we want to startup
+      - gcs
+      - all
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true" # for hot-reloads to work
+    volumes:
+      - ./frontend/gcs:/app # binding mount for hot-reloads
+      - gcs-node-modules:/app/node_modules # Named volume preserves deps across rebuilds
+      - gcs-next:/app/.next # Named volume preserves build cache
+    networks: 
+      - app-network # DNS-based access to other containers on that same network
+    ports:
+      - "${GCS_FRONTEND_PORT}:${GCS_FRONTEND_PORT}" # Map host port to container port 3000
+    restart: unless-stopped
+    depends_on:
+      # frontend container only starts after backend has been built (will need a healthcheck if we want to wait for apis to spin up before running this)
+      - backend-gcs
+
+  frontend-recording-analysis:
+    build:
+      context: ./frontend/recording_analysis
+      dockerfile: Dockerfile
+      args: 
+        RECORDING_ANALYSIS_FRONTEND_PORT: ${RECORDING_ANALYSIS_FRONTEND_PORT}
+    container_name: frontend-recording-analysis
+    profiles:
+      - recording-analysis
+      - all
+    env_file:
+      - .env
+      - ./frontend/recording_analysis/.env
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true" 
+    volumes:
+      - ./frontend/recording_analysis:/app 
+      - recording-analysis-node-modules:/app/node_modules
+      - recording-analysis-next:/app/.next
+    networks: 
+      - app-network
+    ports:
+      - "${RECORDING_ANALYSIS_FRONTEND_PORT}:${RECORDING_ANALYSIS_FRONTEND_PORT}"
+    restart: unless-stopped
+    depends_on:
+      - backend-recording-analysis
+
+# --- Backend ---
+  backend-gcs:
+    build:
+      context: ./backend/gcs
+      dockerfile: Dockerfile
+    container_name: backend-gcs
+    profiles:
+      - gcs
+      - all
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1 # used for flushing out stdout immediately as to have logs/print statements appear in real time 
+      WATCHFILES_FORCE_POLLING: "true" # for hot-reloads to work in Docker
+    volumes:
+      - ./backend/gcs:/app
+    ports:
+      - "${GCS_BACKEND_PORT}:${GCS_BACKEND_PORT}"
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - ai-processor
+  
+  backend-recording-analysis:
+    build:
+      context: ./backend/recording_analysis
+      dockerfile: Dockerfile
+    container_name: backend-recording-analysis
+    profiles:
+      - recording-analysis
+      - all
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1 
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./backend/recording_analysis:/app
+    ports:
+      - "${RECORDING_ANALYSIS_BACKEND_PORT}:${RECORDING_ANALYSIS_BACKEND_PORT}"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  ai-processor:
+    build:
+      context: ./backend/ai_processor
+      dockerfile: Dockerfile
+    container_name: ai-processor
+    profiles:
+      - gcs
+      - all
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      WATCHFILES_FORCE_POLLING: "true"
+      BACKEND_GCS_HOST: backend-gcs
+    volumes:
+      - ./backend/ai_processor:/app
+      # host_path : container_path : options, ro makes this volume read only so it cant update or change the AI-Models.pt
+      - ./backend/ai_processor/models:/app/models:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  rpi-flight-computer:
+    build:
+      context: ./backend/drone/flightComputer
+      dockerfile: Dockerfile
+    container_name: rpi-flight-computer
+    profiles:
+      - gcs
+      - all
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./backend/drone/flightComputer:/app
+    ports:
+      - "${RPI_BACKEND_PORT}:${RPI_BACKEND_PORT}"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network: # Defines a custom Docker network so containers can connect to it
+    driver: bridge # Use Docker's default local "bridge" networking driver
+
+# Uses named volumes for node_modules and .next to prevent host-container dependency 
+# stored for high-performance persistence, isolated from host OS file systems.
+volumes:
+  gcs-node-modules:
+  gcs-next:
+  recording-analysis-node-modules:
+  recording-analysis-next:
