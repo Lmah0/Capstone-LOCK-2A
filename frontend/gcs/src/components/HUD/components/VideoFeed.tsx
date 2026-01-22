@@ -26,21 +26,25 @@ export default function VideoFeed() {
 
                 ws.onopen = () => {
                     console.log('WebSocket connected');
+                    setIsStreaming(true);
                 };
 
                 ws.onclose = () => {
                     console.log('WebSocket disconnected, reconnecting...');
+                    setIsStreaming(false);
                     setTimeout(connectWebSocket, 3000);
                 };
 
                 ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
+                    setIsStreaming(false);
+                    setError('WebSocket connection error');
                 };
 
 
                 wsRef.current = ws;
             } catch (error) {
                 console.error('Failed to connect WebSocket:', error);
+                setIsStreaming(false);
                 setTimeout(connectWebSocket, 3000);
             }
         };
@@ -157,7 +161,6 @@ export default function VideoFeed() {
                         src={videoUrl}
                         alt="Live AI processed video stream"
                         className={`absolute inset-0 w-full h-full object-cover cursor-crosshair ${isStreaming ? 'opacity-100' : 'opacity-50'}`}
-                        onLoad={() => setIsStreaming(true)}
                         onError={() => {
                             setIsStreaming(false);
                             setError("Stream error. Is the Python server running?");
