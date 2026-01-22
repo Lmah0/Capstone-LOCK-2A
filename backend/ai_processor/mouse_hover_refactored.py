@@ -53,7 +53,7 @@ cv2.namedWindow("Interactive Segmentation")
 cv2.setMouseCallback("Interactive Segmentation", mouse_event)
 
 def print_performance_stats():
-    """Print simple performance statistics"""
+    """Print performance statistics with detailed profiling breakdown for DETECTION mode"""
     if not COLLECT_STATS:
         return
     
@@ -62,11 +62,30 @@ def print_performance_stats():
     
     avg_frame_time = np.mean(frame_times)
     fps = 1000.0 / avg_frame_time if avg_frame_time > 0 else 0
+    mode = "TRACKING" if state.tracking else "DETECTION"
     
     print("\n" + "="*60)
-    print(f"Performance Statistics (last {len(frame_times)} frames)")
-    print(f"FPS: {fps:.2f}")
-    print("="*60 + "\n")
+    print(f"[Frame {state.frame_count}] [{mode} MODE] FPS: {fps:.2f} (avg frame: {avg_frame_time:.2f}ms)")
+    
+    # Print detailed breakdown for DETECTION mode
+    if not state.tracking:
+        if state.detection_ran_this_frame:
+            print(f"Input Profiling:")
+            print(f"  Frame: {state.profile_frame_shape} dtype={state.profile_frame_dtype} device={state.profile_frame_device}")
+            print(f"  Model Device: {state.profile_model_device}")
+            print(f"Detection Profiling (detection ran this frame):")
+            print(f"  ├─ Model Inference:  {state.profile_inference_ms:.2f}ms")
+            print(f"  │  ├─ Frame Prep:      {state.profile_frame_prep_ms:.2f}ms")
+            print(f"  │  ├─ Model Predict:   {state.profile_model_predict_ms:.2f}ms (BOTTLENECK CHECK)")
+            print(f"  │  └─ Results Proc:    {state.profile_results_process_ms:.2f}ms")
+            print(f"  ├─ Extract Boxes:    {state.profile_boxes_ms:.2f}ms")
+            print(f"  └─ Drawing/Overlay:  {state.profile_drawing_ms:.2f}ms")
+            total_detection_time = state.profile_inference_ms + state.profile_boxes_ms + state.profile_drawing_ms
+            print(f"  Total Detection:     {total_detection_time:.2f}ms")
+        else:
+            print(f"(Using cached detection from previous frame - no inference run)")
+    
+    print("="*60)
 
 while cap.isOpened():
     if COLLECT_STATS:
