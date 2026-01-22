@@ -19,7 +19,9 @@ export default function HUD({ showHUDElements, pinnedTelemetry, isMetric, follow
     const {droneConnection, isRecording} = useWebSocket();
     return (
         <div id='HUD' className="w-full h-full relative">
-            <VideoFeed />
+            <div id='video-feed'>
+                <VideoFeed />
+            </div>
             
         <div id='server-connection' className="absolute top-4 left-4 z-50">
             <ServerConnection />

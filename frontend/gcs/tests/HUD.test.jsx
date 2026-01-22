@@ -249,3 +249,65 @@ test('Battery Gauge Display', () => {
     })
   );
 });
+
+test('Video Feed Shows Stream Without Errors', async () => {
+  useWebSocket.mockReturnValue({ connectionStatus: 'connected', droneConnection: true, telemetryData: null});
+  render(<HUD {...mockProps} />);
+  
+  const videoFeed = document.getElementById('video-feed');
+  expect(videoFeed).toBeInTheDocument();
+  const videoImg = videoFeed.querySelector('img');
+  expect(videoImg).toBeInTheDocument();
+  
+  // Simulate successful video load
+  if (videoImg) {
+    const loadEvent = new Event('load', { bubbles: true });
+    videoImg.dispatchEvent(loadEvent);
+  }
+
+  // Wait for streaming state to update
+  await waitFor(() => {
+    // Check that no error message is displayed
+    expect(screen.queryByText(/Stream error/i)).not.toBeInTheDocument();
+  });
+
+  expect(screen.queryByText('Connecting to stream...')).not.toBeInTheDocument();
+});
+
+test('Video Feed Shows Error When Stream Fails', async () => {
+  useWebSocket.mockReturnValue({ connectionStatus: 'connected', droneConnection: true, telemetryData: null});
+  render(<HUD {...mockProps} />);
+  
+  const videoFeed = document.getElementById('video-feed');
+  expect(videoFeed).toBeInTheDocument();
+
+  const videoImg = videoFeed.querySelector('img');
+  expect(videoImg).toBeInTheDocument();
+
+  // Simulate video error
+  if (videoImg) {
+    const errorEvent = new Event('error', { bubbles: true });
+    videoImg.dispatchEvent(errorEvent);
+  }
+
+  // Wait for error state to update
+  await waitFor(() => {
+    // Check that error message is displayed
+    expect(screen.getByText('Stream error. Is the Python server running?')).toBeInTheDocument();
+  });
+});
+
+test('Video Feed Shows Loading State Initially', () => {
+  useWebSocket.mockReturnValue({ connectionStatus: 'connected', droneConnection: true, telemetryData: null});
+  render(<HUD {...mockProps} />);
+  
+  const videoFeed = document.getElementById('video-feed');
+  expect(videoFeed).toBeInTheDocument();
+
+  // Should show "Connecting to stream..." initially before video loads
+  expect(screen.getByText('Connecting to stream...')).toBeInTheDocument();
+  
+  // Should show loading spinner
+  const spinner = videoFeed.querySelector('.animate-spin');
+  expect(spinner).toBeInTheDocument();
+});
