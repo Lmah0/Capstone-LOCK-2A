@@ -145,7 +145,7 @@ export default function VideoFeed() {
             <div ref={containerRef} className="relative w-full h-full bg-gray-800 overflow-hidden">
                 {error ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center w-full h-full text-red-400 p-8 text-center bg-gray-900/90">
-                        <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <svg id='error-svg' className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
                         </svg>
                         <p className="font-semibold">{error}</p>
