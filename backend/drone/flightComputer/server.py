@@ -1,4 +1,5 @@
 """Flight Computer Server running on the raspberry pi onboard the drone."""
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -8,6 +9,7 @@ import random
 from contextlib import asynccontextmanager
 from typing import List
 import os
+from videoStreaming.SendVideoStream import send_video_with_timestamps
 from dotenv import load_dotenv
 import datetime
 import threading
@@ -50,6 +52,7 @@ load_dotenv(dotenv_path="../../../.env")
 
 active_connections: List[WebSocket] = []
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     background_task = asyncio.create_task(send_telemetry_data())
@@ -62,6 +65,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
+
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +75,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 async def send_data_to_connections(message: dict):
     """Send message to all connected WebSocket clients"""
     for websocket in active_connections:
@@ -79,6 +84,7 @@ async def send_data_to_connections(message: dict):
         except:
             if websocket in active_connections:
                 active_connections.remove(websocket)
+
 
 async def send_telemetry_data():
     while True:
@@ -93,10 +99,11 @@ async def send_telemetry_data():
             "pitch": random.uniform(-5.0, 5.0),
             "yaw": random.uniform(-5.0, 5.0),
             "battery_remaining": random.uniform(30.0, 100.0),
-            "battery_voltage": random.uniform(10.1, 80.6)
+            "battery_voltage": random.uniform(10.1, 80.6),
         }
         await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
+
 
 def setFlightMode(mode: str):
     """Set the flight mode of the drone"""
@@ -107,6 +114,7 @@ def setFlightMode(mode: str):
     except Exception as e:
         raise RuntimeError(f"Failed to set flight mode: {e}")
 
+
 def setFollowDistance(distance: float):
     """Set the follow distance of the drone"""
     if not distance or distance <= 0:
@@ -116,22 +124,30 @@ def setFollowDistance(distance: float):
     except Exception as e:
         raise RuntimeError(f"Failed to set follow distance: {e}")
 
+
 def stopFollowingTarget():
     """Stop following the target"""
     try:
         print("Stopping following the target")
     except Exception as e:
         raise RuntimeError(f"Failed to stop following target: {e}")
-    
+
+
 def moveToLocation(location):
     """Move the drone to a specified location"""
-    if not location or "lat" not in location or "lon" not in location or "alt" not in location:
+    if (
+        not location
+        or "lat" not in location
+        or "lon" not in location
+        or "alt" not in location
+    ):
         raise ValueError("Invalid location data")
     try:
         # Replace none with vehicle connection when available
         move_to_location(None, location["lat"], location["lon"], location["alt"])
     except Exception as e:
         raise RuntimeError(f"Failed to move to location: {e}")
+
 
 @app.websocket("/ws/flight-computer")
 async def websocket_endpoint(websocket: WebSocket):
@@ -140,11 +156,11 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()    
+            data = await websocket.receive_text()
             msg = json.loads(data)
             cmd = msg.get("command")
             # Handle commands
-            if cmd =="move_to_location":
+            if cmd == "move_to_location":
                 moveToLocation(msg.get("location"))
             elif cmd == "set_flight_mode":
                 setFlightMode(msg.get("mode"))
@@ -167,8 +183,19 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
 
+
 if __name__ == "__main__":
     # vehicle_connection = connect_to_vehicle()
     # print("Vehicle connection established.")
 
-    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('RPI_BACKEND_PORT')), reload=True)
+    video_thread = threading.Thread(target=send_video_with_timestamps, daemon=True)
+    video_thread.start()
+    print("Video streaming thread started")
+    time.sleep(0.5)  # Give some time for the thread to start
+
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=int(os.getenv("RPI_BACKEND_PORT")),
+        reload=True,
+    )
