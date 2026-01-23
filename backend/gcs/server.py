@@ -411,7 +411,6 @@ async def stream_mock_feed_to_ai(websocket: WebSocket):
 
     if not cap.isOpened():
         print(f"Error: Could not open video file at {VIDEO_PATH}")
-        await asyncio.sleep(5)  # Wait before allowing reconnect
         await websocket.close()
         return
 
