@@ -258,9 +258,14 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
     if results is not None and results[0].boxes is not None and len(results[0].boxes) > 0:
         t_boxes_start = time.time()
         # Boxes are already numpy arrays from detection step
-        boxes = results[0].boxes.xyxy if isinstance(results[0].boxes.xyxy, np.ndarray) else results[0].boxes.xyxy.cpu().numpy()
+        boxes = results[0].boxes.xyxy
+        if not isinstance(boxes, np.ndarray):
+            boxes = boxes.cpu().numpy() if hasattr(boxes, 'cpu') else np.array(boxes)
         boxes = boxes.astype(np.int32)
-        classes = results[0].boxes.cls if isinstance(results[0].boxes.cls, np.ndarray) else results[0].boxes.cls.cpu().numpy()
+        
+        classes = results[0].boxes.cls
+        if not isinstance(classes, np.ndarray):
+            classes = classes.cpu().numpy() if hasattr(classes, 'cpu') else np.array(classes)
         state.profile_boxes_ms = (time.time() - t_boxes_start) * 1000
         
         cursor_x, cursor_y = cursor_pos if cursor_pos else (0, 0)
