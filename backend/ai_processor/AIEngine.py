@@ -236,12 +236,13 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
                                verbose=False)
         state.profile_model_predict_ms = (time.time() - t_model_start) * 1000
         
-        # GPU optimization: Transfer results to CPU ONCE after detection
+        # GPU optimization: Convert results to numpy ONCE after detection
         # This avoids repeated GPU transfers in the box processing loop
         t_results_cpu = time.time()
         if state.gpu_available and results[0].boxes is not None and len(results[0].boxes) > 0:
-            results[0].boxes.xyxy = results[0].boxes.xyxy.cpu()
-            results[0].boxes.cls = results[0].boxes.cls.cpu()
+            # Convert tensors to numpy (handles GPU->CPU automatically)
+            results[0].boxes.xyxy = results[0].boxes.xyxy.cpu().numpy() if hasattr(results[0].boxes.xyxy, 'cpu') else np.array(results[0].boxes.xyxy)
+            results[0].boxes.cls = results[0].boxes.cls.cpu().numpy() if hasattr(results[0].boxes.cls, 'cpu') else np.array(results[0].boxes.cls)
         state.profile_results_to_cpu_ms = (time.time() - t_results_cpu) * 1000
         
         state.last_detection_results = results
@@ -253,12 +254,13 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
     else:
         results = state.last_detection_results
     
-    # Process bounding boxes (already on CPU if GPU was used, no transfers needed)
+    # Process bounding boxes (already converted to numpy after detection, no transfers needed)
     if results is not None and results[0].boxes is not None and len(results[0].boxes) > 0:
         t_boxes_start = time.time()
-        # Boxes already transferred to CPU after detection - just convert to numpy
-        boxes = results[0].boxes.xyxy.numpy().astype(np.int32)
-        classes = results[0].boxes.cls.numpy()
+        # Boxes are already numpy arrays from detection step
+        boxes = results[0].boxes.xyxy if isinstance(results[0].boxes.xyxy, np.ndarray) else results[0].boxes.xyxy.cpu().numpy()
+        boxes = boxes.astype(np.int32)
+        classes = results[0].boxes.cls if isinstance(results[0].boxes.cls, np.ndarray) else results[0].boxes.cls.cpu().numpy()
         state.profile_boxes_ms = (time.time() - t_boxes_start) * 1000
         
         cursor_x, cursor_y = cursor_pos if cursor_pos else (0, 0)
