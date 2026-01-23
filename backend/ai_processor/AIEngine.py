@@ -129,21 +129,23 @@ class ProcessingState:
         self.last_tracker_bbox = None
         self.last_rendered_tracking_frame = None  # Cache rendered tracking frame
         
+        # GPU optimization
+        self.gpu_available = torch.cuda.is_available()
+        
         # Fine-grained profiling timings (in ms)
         self.profile_inference_ms = 0.0      # YOLO model inference time
         self.profile_boxes_ms = 0.0          # Box extraction and processing time
         self.profile_drawing_ms = 0.0        # Drawing/visualization time
+        self.profile_frame_to_gpu_ms = 0.0   # Frame CPU->GPU transfer time
+        self.profile_results_to_cpu_ms = 0.0 # Results GPU->CPU transfer time
         self.detection_ran_this_frame = False  # Track if detection actually ran this frame
         
         # Detailed inference breakdown
-        self.profile_frame_prep_ms = 0.0     # Frame preparation before model
         self.profile_model_predict_ms = 0.0  # Actual model.predict() call
-        self.profile_results_process_ms = 0.0  # Processing results after model
         
         # Input profiling
         self.profile_frame_shape = None
         self.profile_frame_dtype = None
-        self.profile_frame_device = "unknown"
         self.profile_model_device = "unknown"
     
     def reset_tracking(self):
@@ -210,10 +212,6 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
         # Profile frame inputs
         state.profile_frame_shape = frame.shape
         state.profile_frame_dtype = str(frame.dtype)
-        if hasattr(frame, 'device'):
-            state.profile_frame_device = str(frame.device)
-        else:
-            state.profile_frame_device = "CPU (numpy)"
         
         # Profile model device
         try:
@@ -227,31 +225,45 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
         except:
             state.profile_model_device = "unknown"
         
-        # Time frame prep
-        t_frame_prep = time.time()
-        # (frame is already loaded, just a timestamp marker)
-        state.profile_frame_prep_ms = (time.time() - t_frame_prep) * 1000
+        # GPU optimization: Move frame to GPU upfront (single transfer)
+        inference_frame = frame
+        state.profile_frame_to_gpu_ms = 0.0
+        if state.gpu_available:
+            t_gpu_transfer = time.time()
+            # Convert uint8 [0-255] to float32 [0-1] on GPU in one operation
+            inference_frame = torch.from_numpy(frame).float().cuda() / 255.0
+            state.profile_frame_to_gpu_ms = (time.time() - t_gpu_transfer) * 1000
         
-        # Time the actual model inference
+        # Time the actual model inference with fp16 for memory efficiency
         t_model_start = time.time()
-        results = model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD,
-                               iou=TrackingConfig.MODEL_IOU, verbose=False)
+        results = model.predict(inference_frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD,
+                               iou=TrackingConfig.MODEL_IOU, device=0 if state.gpu_available else 'cpu',
+                               half=state.gpu_available, verbose=False)
         state.profile_model_predict_ms = (time.time() - t_model_start) * 1000
         
-        # Time result processing
-        t_results_start = time.time()
-        state.last_detection_results = results
-        state.profile_results_process_ms = (time.time() - t_results_start) * 1000
+        # GPU optimization: Transfer results to CPU ONCE after detection
+        # This avoids repeated GPU transfers in the box processing loop
+        t_results_cpu = time.time()
+        if state.gpu_available and results[0].boxes is not None and len(results[0].boxes) > 0:
+            results[0].boxes.xyxy = results[0].boxes.xyxy.cpu()
+            results[0].boxes.cls = results[0].boxes.cls.cpu()
+        state.profile_results_to_cpu_ms = (time.time() - t_results_cpu) * 1000
         
-        state.profile_inference_ms = state.profile_frame_prep_ms + state.profile_model_predict_ms + state.profile_results_process_ms
+        state.last_detection_results = results
+        state.profile_inference_ms = state.profile_model_predict_ms + state.profile_results_to_cpu_ms
+        
+        # Periodic GPU memory optimization
+        if state.gpu_available and state.frame_count % 100 == 0:
+            torch.cuda.empty_cache()
     else:
         results = state.last_detection_results
     
-    # Process bounding boxes
+    # Process bounding boxes (already on CPU if GPU was used, no transfers needed)
     if results is not None and results[0].boxes is not None and len(results[0].boxes) > 0:
         t_boxes_start = time.time()
-        boxes = results[0].boxes.xyxy.cpu().numpy().astype(np.int32)
-        classes = results[0].boxes.cls.cpu().numpy()
+        # Boxes already transferred to CPU after detection - just convert to numpy
+        boxes = results[0].boxes.xyxy.numpy().astype(np.int32)
+        classes = results[0].boxes.cls.numpy()
         state.profile_boxes_ms = (time.time() - t_boxes_start) * 1000
         
         cursor_x, cursor_y = cursor_pos if cursor_pos else (0, 0)
