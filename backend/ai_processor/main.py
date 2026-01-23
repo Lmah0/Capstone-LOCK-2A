@@ -23,7 +23,7 @@ engine = TrackingEngine(MODEL_PATH)
 model = engine.model
 
 # Initialize processing state 
-state = ProcessingState()
+state = ProcessingState(model=model)
 
 # Basic FPS tracking (minimal overhead)
 STATS_WINDOW = 100
