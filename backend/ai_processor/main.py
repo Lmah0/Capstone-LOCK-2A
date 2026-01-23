@@ -15,6 +15,7 @@ from GeoLocate import locate
 # Global Vars
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'yolo11n.pt')
+VIDEO_PATH = os.path.join(BASE_DIR, 'video.mp4')
 
 # Initialize engine 
 engine = TrackingEngine(MODEL_PATH)
@@ -71,7 +72,8 @@ def print_fps():
 print("AI Processor started, waiting for frames...")
 
 try:
-    AiStreamClient.initialize()
+    AiStreamClient.initialize_video(VIDEO_PATH) # Start Playing Mocked Video
+    AiStreamClient.initialize() # 
     
     # Track WebSocket timing
     get_frame_times = deque(maxlen=100)
@@ -82,7 +84,7 @@ try:
         
         # Get frame
         t_get_start = time.time()
-        frame = AiStreamClient.get_current_frame()
+        frame = AiStreamClient.get_video_frame()
         t_get_ms = (time.time() - t_get_start) * 1000
         get_frame_times.append(t_get_ms)
         
@@ -144,7 +146,7 @@ try:
         # Send frame to frontend
         display_frame = output_frame if output_frame is not None else frame
         t_send_start = time.time()
-        AiStreamClient.send_frame(display_frame)
+        AiStreamClient.push_frame(display_frame)
         t_send_ms = (time.time() - t_send_start) * 1000
         send_frame_times.append(t_send_ms)
         

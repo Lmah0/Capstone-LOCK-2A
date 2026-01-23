@@ -6,7 +6,7 @@ export default function VideoFeed() {
     const webrtcUrl = `http://localhost:${webrtcPort}/offer`;
     const gcsServerUrl = `ws://localhost:${backendPort}/ws/gcs`;
 
-    const [isStreaming, setIsStreaming] = useState(false);
+    const [isWebRTCStreaming, setIsWebRTCStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isTracking, setIsTracking] = useState(false);
     const [connectionState, setConnectionState] = useState<string>('disconnected');
@@ -38,10 +38,10 @@ export default function VideoFeed() {
             pc.onconnectionstatechange = () => {
                 setConnectionState(pc.connectionState);
                 if (pc.connectionState === 'connected') {
-                    setIsStreaming(true);
+                    setIsWebRTCStreaming(true);
                     setError(null);
                 } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-                    setIsStreaming(false);
+                    setIsWebRTCStreaming(false);
                     // Attempt reconnection after a delay
                     setTimeout(startWebRTC, 3000);
                 }
@@ -52,10 +52,10 @@ export default function VideoFeed() {
                 if (videoRef.current && event.streams[0]) {
                     videoRef.current.srcObject = event.streams[0];
                     videoRef.current.play().then(() => {
-                        setIsStreaming(true);
+                        setIsWebRTCStreaming(true);
                     }).catch((err) => {
                         console.error('Video play failed:', err);
-                        setIsStreaming(true);
+                        setIsWebRTCStreaming(true);
                     });
                 }
             };
@@ -104,7 +104,7 @@ export default function VideoFeed() {
         } catch (err) {
             console.error('WebRTC connection error:', err);
             setError('Failed to connect to video stream. Is the AI processor running?');
-            setIsStreaming(false);
+            setIsWebRTCStreaming(false);
             setConnectionState('failed');
             // Retry connection
             setTimeout(startWebRTC, 3000);
@@ -131,25 +131,20 @@ export default function VideoFeed() {
 
                 ws.onopen = () => {
                     console.log('WebSocket connected');
-                    setIsStreaming(true);
                 };
 
                 ws.onclose = () => {
                     console.log('WebSocket disconnected, reconnecting...');
-                    setIsStreaming(false);
                     setTimeout(connectWebSocket, 3000);
                 };
 
                 ws.onerror = (error) => {
-                    setIsStreaming(false);
                     setError('WebSocket connection error');
                 };
-
 
                 wsRef.current = ws;
             } catch (error) {
                 console.error('Failed to connect WebSocket:', error);
-                setIsStreaming(false);
                 setTimeout(connectWebSocket, 3000);
             }
         };
@@ -161,7 +156,7 @@ export default function VideoFeed() {
                 wsRef.current.close();
             }
         };
-    }, [gcsServerUrl]);
+    }, [gcsServerUrl]); // Dependency array, only rerun if the url changes...
 
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLVideoElement>) => {
         if (!videoRef.current) return;
@@ -264,17 +259,17 @@ export default function VideoFeed() {
                         autoPlay
                         playsInline
                         muted
-                        className={`absolute inset-0 w-full h-full object-cover cursor-crosshair ${isStreaming ? 'opacity-100' : 'opacity-50'}`}
+                        className={`absolute inset-0 w-full h-full object-cover cursor-crosshair ${isWebRTCStreaming ? 'opacity-100' : 'opacity-50'}`}
                         onError={() => {
-                            setIsStreaming(false);
+                            setIsWebRTCStreaming(false);
                             setError("Stream error. Is the Python server running?");
-                        }}                        onMouseMove={handleMouseMove}
+                        }}                        
+                        onMouseMove={handleMouseMove}
                         onClick={handleClick}
-                        onError={(e) => console.error('Video error:', e)}
                     />
                 )}
 
-                {!isStreaming && !error && (
+                {!isWebRTCStreaming && !error && (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 backdrop-blur-sm z-10">
                         <svg className="animate-spin h-8 w-8 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

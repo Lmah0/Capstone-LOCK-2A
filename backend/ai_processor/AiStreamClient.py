@@ -78,8 +78,8 @@ def _start_event_loop():
     asyncio.set_event_loop(_main_loop)
 
     # Start both WebRTC server and command handler
-    _main_loop.create_task(_start_webrtc_server())
-    _main_loop.create_task(_receive_frontend_commands())
+    _main_loop.create_task(start_webrtc_server())
+    _main_loop.create_task(receive_frontend_commands())
 
     _main_loop.run_forever()
 
@@ -91,18 +91,16 @@ def initialize():
         print("AiStreamClient already initialized")
         return
 
-    print("Initializing AiStreamClient...")
-
+    print("Initializing command Websocket and WebRTC video stream")
     # Start event loop in background thread
     _main_thread = threading.Thread(target=_start_event_loop, daemon=True)
     _main_thread.start()
 
     # Wait for loop to start
     time.sleep(0.1)
-    print("AiStreamClient initialized successfully")
 
 # COMMAND RECEIVER
-async def _receive_frontend_commands():
+async def receive_frontend_commands():
     """Connect to command channel and receive frontend commands"""
     global _command_ws, _pending_click, _pending_command, _mouse_position, _command_lock
 
@@ -193,7 +191,11 @@ def get_mouse_position():
 
 # WebRTC Video Stream
 class AIVideoStreamTrack(VideoStreamTrack):
-    """Custom video track that streams AI-processed frames via WebRTC."""
+    """
+        - Custom video track that streams AI-processed frames via WebRTC.
+        - Architecture: latest-frame (overwrite) buffer
+        - Frames may be dropped & delivery of every frame is not guaranteed but this is low latency
+    """
     kind = "video"
 
     def __init__(self):
@@ -201,6 +203,7 @@ class AIVideoStreamTrack(VideoStreamTrack):
         self._start = None # Used internally by parent class of when streaming started
 
     async def recv(self):
+        """Give WebRTC the next frame to send."""
         try:
             if self._start is None:
                 self._start = time.time()
@@ -208,7 +211,7 @@ class AIVideoStreamTrack(VideoStreamTrack):
             # Pts = presentation timestamp which is the frame number
             pts, time_base = await self.next_timestamp()
 
-            frame = _get_output_frame()
+            frame = get_latest_ai_frame_for_stream()
 
             if frame is None: # If no frame is avaliable send a black screen
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -229,15 +232,13 @@ class AIVideoStreamTrack(VideoStreamTrack):
             print(f"WebRTC recv ERROR: {e}")
             raise
 
-
-def _get_output_frame():
-    """Get the latest output frame"""
+def get_latest_ai_frame_for_stream():
+    """Get the latest output frame that user pushed to stream"""
     global _output_frame
     with _output_frame_lock:
         if _output_frame is None:
             return None
         return _output_frame.copy()
-
 
 def push_frame(frame: np.ndarray):
     """Push a processed frame to be streamed via WebRTC"""
@@ -276,7 +277,7 @@ async def handle_offer(offer: RTCOffer):
         "type": pc.localDescription.type
     }
 
-async def _start_webrtc_server():
+async def start_webrtc_server():
     """Start the WebRTC signaling server using uvicorn."""
     global _server
 
@@ -291,14 +292,14 @@ async def _start_webrtc_server():
     await _server.serve()
 
 
-async def _stop_webrtc_server():
+async def stop_webrtc_server():
     """Stop the WebRTC signaling server."""
     global _server
     if _server:
         _server.should_exit = True
 
 # Video Input (Mocked video stream)
-def init(video_path: str = None) -> bool:
+def initialize_video(video_path: str = None) -> bool:
     """Initialize mocked video"""
     global _video_capture
 
@@ -311,7 +312,7 @@ def init(video_path: str = None) -> bool:
     print(f"Video capture initialized: {video_path}")
     return True
 
-def get_frame():
+def get_video_frame():
     """ Get the next frame from the video capture. Automatically loops when video ends."""
     global _video_capture
 
@@ -329,7 +330,7 @@ def get_frame():
 
         return frame.copy()
 
-def _release_video():
+def release_video():
     """Release the video capture resource."""
     global _video_capture
     if _video_capture is not None:
@@ -341,10 +342,10 @@ def shutdown():
     """Clean shutdown of all connections and event loop"""
     global _main_loop
 
-    _release_video()
+    release_video()
 
     if _main_loop is not None:
-        asyncio.run_coroutine_threadsafe(_stop_webrtc_server(), _main_loop)
+        asyncio.run_coroutine_threadsafe(stop_webrtc_server(), _main_loop)
         _main_loop.call_soon_threadsafe(_main_loop.stop)
 
     print("AiStreamClient shutdown complete")
