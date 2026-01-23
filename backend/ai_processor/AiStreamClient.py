@@ -269,7 +269,7 @@ async def _send_frame_async(frame):
         return
 
     try:
-        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         if not success:
             return  # Silently skip frame encoding failures
 
