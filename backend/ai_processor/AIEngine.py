@@ -236,17 +236,8 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
                                verbose=False)
         state.profile_model_predict_ms = (time.time() - t_model_start) * 1000
         
-        # GPU optimization: Convert results to numpy ONCE after detection
-        # This avoids repeated GPU transfers in the box processing loop
-        t_results_cpu = time.time()
-        if state.gpu_available and results[0].boxes is not None and len(results[0].boxes) > 0:
-            # Convert tensors to numpy (handles GPU->CPU automatically)
-            results[0].boxes.xyxy = results[0].boxes.xyxy.cpu().numpy() if hasattr(results[0].boxes.xyxy, 'cpu') else np.array(results[0].boxes.xyxy)
-            results[0].boxes.cls = results[0].boxes.cls.cpu().numpy() if hasattr(results[0].boxes.cls, 'cpu') else np.array(results[0].boxes.cls)
-        state.profile_results_to_cpu_ms = (time.time() - t_results_cpu) * 1000
-        
         state.last_detection_results = results
-        state.profile_inference_ms = state.profile_model_predict_ms + state.profile_results_to_cpu_ms
+        state.profile_inference_ms = state.profile_model_predict_ms
         
         # Periodic GPU memory optimization
         if state.gpu_available and state.frame_count % 100 == 0:
@@ -254,18 +245,28 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
     else:
         results = state.last_detection_results
     
-    # Process bounding boxes (already converted to numpy after detection, no transfers needed)
+    # Process bounding boxes - convert GPU tensors to numpy only when needed
     if results is not None and results[0].boxes is not None and len(results[0].boxes) > 0:
         t_boxes_start = time.time()
-        # Boxes are already numpy arrays from detection step
-        boxes = results[0].boxes.xyxy
-        if not isinstance(boxes, np.ndarray):
-            boxes = boxes.cpu().numpy() if hasattr(boxes, 'cpu') else np.array(boxes)
-        boxes = boxes.astype(np.int32)
+        # Safe conversion: handle both GPU tensors and numpy arrays
+        xyxy = results[0].boxes.xyxy
+        cls_vals = results[0].boxes.cls
         
-        classes = results[0].boxes.cls
-        if not isinstance(classes, np.ndarray):
-            classes = classes.cpu().numpy() if hasattr(classes, 'cpu') else np.array(classes)
+        # Convert to numpy if needed (GPU tensor -> CPU numpy)
+        if hasattr(xyxy, 'cpu'):
+            boxes = xyxy.cpu().numpy().astype(np.int32)
+        elif hasattr(xyxy, 'numpy'):
+            boxes = xyxy.numpy().astype(np.int32)
+        else:
+            boxes = np.array(xyxy).astype(np.int32)
+            
+        if hasattr(cls_vals, 'cpu'):
+            classes = cls_vals.cpu().numpy()
+        elif hasattr(cls_vals, 'numpy'):
+            classes = cls_vals.numpy()
+        else:
+            classes = np.array(cls_vals)
+            
         state.profile_boxes_ms = (time.time() - t_boxes_start) * 1000
         
         cursor_x, cursor_y = cursor_pos if cursor_pos else (0, 0)
