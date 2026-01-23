@@ -46,7 +46,9 @@ def yield_frames_with_timestamps(stream_url=STREAM_URL, timestamp_port=TIMESTAMP
     Generator that yields frames with timestamps
     Returns: (frame_array, timestamp_info_dict)
     """
-
+    container = None
+    timestamp_receiver = None
+    timestamp_thread = None
     try:
         container = setup_video_stream(stream_url)
 
@@ -73,10 +75,14 @@ def yield_frames_with_timestamps(stream_url=STREAM_URL, timestamp_port=TIMESTAMP
                             continue  # Throw away P-frames until we get a full picture.
                     receive_time = time.time()
                     img = frame.to_ndarray(format="bgr24")
+                # 1. Convert to seconds: 21990000 / 90000 = 244.33 seconds
+                    timestamp_in_seconds = float(frame.pts * frame.time_base)
 
-                    # Get timestamp info for this frame
-                    timestamp_info = timestamp_receiver.get_timestamp()
-
+                    # 2. Convert to Frame ID: 244.33 * 30 fps = 7330
+                    current_frame_id = int(round(timestamp_in_seconds * 30))
+                                        
+                    # Get timestamp info for this frame based on frame ID from sender
+                    timestamp_info = timestamp_receiver.get_timestamp(current_frame_id)
                     if timestamp_info:
                         timestamp_info["receive_time"] = receive_time
 
@@ -91,7 +97,7 @@ def yield_frames_with_timestamps(stream_url=STREAM_URL, timestamp_port=TIMESTAMP
 
                     else:
                         timestamp_info = {
-                            "frame_number": timestamp_receiver.frame_number,
+                            "frame_number": current_frame_id,
                             "receive_time": receive_time,
                             "wall_clock_time": None,
                             "latency_ms": None,
@@ -114,7 +120,7 @@ def yield_frames_with_timestamps(stream_url=STREAM_URL, timestamp_port=TIMESTAMP
         print("Stream resources released.")
 
 
-def video_receiver_sync_task(
+def video_telemetry_sync_task(
     stream_url, timestamp_port, sync_manager, frame_queue, stop_event
 ):
     print(f"Starting sync task on {stream_url}...")
@@ -123,7 +129,6 @@ def video_receiver_sync_task(
             for frame, ts_info in yield_frames_with_timestamps(
                 stream_url, timestamp_port
             ):
-
                 if ts_info["wall_clock_time"] is None or frame is None:
                     continue
 
@@ -143,7 +148,7 @@ def video_receiver_sync_task(
                     jpeg_bytes,
                 )
 
-                if frame_num % 60 == 0:
+                if frame_num % 30 == 0:
                     diff = "N/A"
                     if timestamped_frame.telemetry:
                         diff = f"{timestamped_frame.telemetry.get('sync_time_diff_ms', 0):.2f}ms"

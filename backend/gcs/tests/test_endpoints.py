@@ -21,7 +21,7 @@ test_telemetry = {
     # "yaw": 0.5,
     # "battery_remaining": 75.0,
     # "battery_voltage": 12.5
-    "last_time": 1700000000.0,
+    "timestamp": 1700000000.0,
     "lat": 123.4567,
     "lon": -123.4567,
     "rel_alt": 150.0,

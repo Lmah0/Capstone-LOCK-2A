@@ -1,3 +1,4 @@
+from collections import deque
 import socket
 import threading
 import json
@@ -7,11 +8,11 @@ class TimestampReceiver:
     """Receive JSON timestamps from separate UDP port"""
 
     def __init__(self, port):
-        self.frame_timestamps = {}
-        self.frame_number = 0
+        self.timestamp_queue = deque(maxlen=500)       
         self.port = port
         self.running = False
         self.sock = None
+        self._lock = threading.Lock()
 
     def start_receiving(self):
         """Start background thread to receive timestamps"""
@@ -31,9 +32,8 @@ class TimestampReceiver:
             try:
                 data, addr = self.sock.recvfrom(4096)
                 timestamp_info = json.loads(data.decode("utf-8"))
-
-                self.frame_number = timestamp_info["frame_number"]
-                self.frame_timestamps[self.frame_number] = timestamp_info
+                with self._lock:
+                    self.timestamp_queue.append(timestamp_info)
 
             except socket.timeout:
                 continue
@@ -49,6 +49,31 @@ class TimestampReceiver:
         if self.sock:
             self.sock.close()
 
-    def get_timestamp(self):
-        """Get timestamp for a specific frame number"""
-        return self.frame_timestamps.get(self.frame_number, None)
+    def get_timestamp(self, target_frame_number):
+        """
+        Searches queue for a specific frame number.
+        Discards any packets OLDER than the target (flush stale data).
+        """
+        with self._lock:
+            while len(self.timestamp_queue) > 0:
+                # Peek at the oldest item
+                oldest_item = self.timestamp_queue[0]
+                oldest_num = oldest_item['frame_number']
+
+                if oldest_num == target_frame_number:
+                    # MATCH FOUND! Remove and return.
+                    return self.timestamp_queue.popleft()
+                
+                elif oldest_num < target_frame_number:
+                    # This packet is too old (stale). Trash it and keep looking.
+                    self.timestamp_queue.popleft()
+                    continue
+                
+                else:
+                    # oldest_num > target_frame_number
+                    # The queue only has NEWER data. The packet we want is missing 
+                    # (dropped or never arrived).
+                    return None
+            
+            # Queue is empty
+            return None

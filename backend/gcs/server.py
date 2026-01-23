@@ -14,7 +14,7 @@ import os
 # from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
 from videoStreaming.FrameTelemetrySynchronizer import FrameTelemetrySynchronizer
-from videoStreaming.receiveVideoStream import video_receiver_sync_task
+from videoStreaming.receiveVideoStream import video_telemetry_sync_task
 import queue
 import base64
 import cv2
@@ -34,15 +34,15 @@ active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 ai_command_connections: List[WebSocket] = []
 
-# Video frame queue for MJPEG streaming
-video_frame_queue = queue.Queue(maxsize=2)
+drone_frame_queue = queue.Queue()  # Raw frames FROM drone → TO AI processor
+ai_processed_frame_queue = queue.Queue()  # Processed frames FROM AI → TO frontend
 
 # Video stream configuration
-STREAM_URL = "udp://192.168.1.123:5000"  # Video from drone
+STREAM_URL = "udp://192.168.1.66:5000"  # Video from drone
 TIMESTAMP_PORT = 5001  # Timestamps from drone
 
 
-# Global synchronizer
+# Global synchronizer for frames and telemetry
 frame_telemetry_sync = FrameTelemetrySynchronizer()
 
 
@@ -51,7 +51,7 @@ async def flight_computer_background_task():
     global flight_comp_ws
     print("Starting flight computer background task...")
     flight_comp_url = os.getenv(
-        "FLIGHT_COMP_URL", "ws://192.168.1.123:5555/ws/flight-computer"
+        "FLIGHT_COMP_URL", "ws://192.168.1.66:5555/ws/flight-computer"
     )
     if not flight_comp_url:
         raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
@@ -66,14 +66,13 @@ async def flight_computer_background_task():
                         data = json.loads(message)
 
                         # Extract timestamp from telemetry data
-                        telemetry_timestamp = data.get("last_time")
+                        telemetry_timestamp = data.get("timestamp")
 
                         if telemetry_timestamp:
                             # Add to synchronizer
                             frame_telemetry_sync.add_telemetry(
                                 telemetry_timestamp, data
                             )
-                            # print(f"Received telemetry at {telemetry_timestamp}")
 
                         # Forward to frontend
                         await send_data_to_connections(data)
@@ -87,22 +86,20 @@ async def flight_computer_background_task():
             await asyncio.sleep(5)
 
 
-stop_event = threading.Event()
+stop_event = threading.Event() # Event to signal video and telemetry sync background tasks to stop when shutting down
 
-
-async def video_receiver_background_task():
+async def video_telemetry_synchronization_background_task():
     """Async wrapper for video receiver"""
     loop = asyncio.get_running_loop()
 
-    # Run the synchronous blocking task in a separate thread executor
-    # Pass the global variables as arguments here
+    # Run task to synchronize video frames with telemetry
     await loop.run_in_executor(
         None,
-        video_receiver_sync_task,
+        video_telemetry_sync_task,
         STREAM_URL,
         TIMESTAMP_PORT,
         frame_telemetry_sync,
-        video_frame_queue,
+        drone_frame_queue,
         stop_event,
     )
 
@@ -116,8 +113,8 @@ async def lifespan(app: FastAPI):
         # Start flight computer telemetry receiver
         tasks.append(asyncio.create_task(flight_computer_background_task()))
 
-        # Start video receiver with sync
-        tasks.append(asyncio.create_task(video_receiver_background_task()))
+        # Start video and timestamp synchronization task
+        tasks.append(asyncio.create_task(video_telemetry_synchronization_background_task()))
 
         yield
 
@@ -333,7 +330,7 @@ async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
             # Put the new frame into the queue for the MJPEG streamer
             try:
                 # Try to add frame without blocking
-                video_frame_queue.put_nowait(jpeg_bytes)
+                ai_processed_frame_queue.put_nowait(jpeg_bytes)
             except queue.Full:
                 # Queue is full - skip this frame to maintain latency
                 pass
@@ -357,27 +354,27 @@ async def websocket_camera_source_endpoint(websocket: WebSocket):
 
     # Try to use live video feed from the queue
     use_live_feed = (
-        not video_frame_queue.empty() or len(frame_telemetry_sync.frame_buffer) > 0
+        not drone_frame_queue.empty() or len(frame_telemetry_sync.frame_buffer) > 0
     )
 
     if use_live_feed:
         print("Using LIVE video feed from drone")
         await stream_live_feed_to_ai(websocket)
     else:
-        print("Using MOCK video feed (MP4 file)")
-        await stream_mock_feed_to_ai(websocket)
+            print("Using MOCK video feed (MP4 file)")
+            await stream_mock_feed_to_ai(websocket)
 
 
 async def stream_live_feed_to_ai(websocket: WebSocket):
     """Stream live video frames from drone to AI processor"""
     frame_timeout_count = 0
-    max_timeout = 10  # Switch to mock after 10 consecutive timeouts
+    max_timeout = 10  # Switch to mock video after 10 consecutive timeouts
 
     try:
         while True:
             try:
                 # Get frame from queue with short timeout
-                jpeg_bytes = await asyncio.to_thread(video_frame_queue.get, timeout=0.5)
+                jpeg_bytes = await asyncio.to_thread(drone_frame_queue.get, timeout=0.5)
 
                 # Reset timeout counter on successful frame
                 frame_timeout_count = 0
@@ -389,7 +386,7 @@ async def stream_live_feed_to_ai(websocket: WebSocket):
             except queue.Empty:
                 frame_timeout_count += 1
 
-                # If we haven't received frames for a while, switch to mock
+                # If frame not received after max timeout, switch to mock
                 if frame_timeout_count >= max_timeout:
                     print("⚠ Live feed timeout - switching to mock video")
                     await stream_mock_feed_to_ai(websocket)
@@ -453,7 +450,7 @@ async def generate_video_frames():
     while True:
         try:
             # 1. Wait for a new frame
-            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=0.5)
+            jpeg_frame = await asyncio.to_thread(ai_processed_frame_queue.get, timeout=0.5)
 
             yield frame_boundary
             yield content_type
