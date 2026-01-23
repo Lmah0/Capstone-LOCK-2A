@@ -26,16 +26,18 @@ def _init_tracker_config():
     """Initialize tracker type based on GPU availability"""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     vittrack_model_path = os.path.join(base_dir, "models", "object_tracking_vittrack_2023sep.onnx")
+    gpu_available = torch.cuda.is_available()
     
-    if TrackingConfig.PREFER_GPU_TRACKER and os.path.exists(vittrack_model_path):
+    # Check GPU first, then VitTrack model availability
+    if gpu_available and TrackingConfig.PREFER_GPU_TRACKER and os.path.exists(vittrack_model_path):
         TrackingConfig.TRACKER_TYPE = 'vittrack'
         TrackingConfig.VITTRACK_MODEL = vittrack_model_path
-        gpu_available = torch.cuda.is_available()
-        device = "GPU" if gpu_available else "CPU"
-        print(f"✓ VitTrack model found. Using VitTrack tracker ({device}-optimized)")
+        print(f"✓ GPU available and VitTrack model found. Using VitTrack tracker (GPU-optimized)")
     else:
-        if TrackingConfig.PREFER_GPU_TRACKER and not os.path.exists(vittrack_model_path):
-            print(f"⚠ VitTrack model not found at {vittrack_model_path}. Using CSRT tracker.")
+        if gpu_available and TrackingConfig.PREFER_GPU_TRACKER and not os.path.exists(vittrack_model_path):
+            print(f"⚠ GPU available but VitTrack model not found at {vittrack_model_path}. Using CSRT tracker.")
+        elif not gpu_available and TrackingConfig.PREFER_GPU_TRACKER:
+            print("⚠ No GPU available. Using CSRT tracker (CPU)")
         TrackingConfig.TRACKER_TYPE = 'csrt'
         print("Using CSRT tracker (CPU)")
 

@@ -22,7 +22,7 @@ COLLECT_STATS = args.stats
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Use relative paths from the script directory
-VIDEO_PATH = os.path.join(script_dir, "../gcs/video.mp4")
+VIDEO_PATH = os.path.join(script_dir, "video.mp4")
 MODEL_PATH = os.path.join(script_dir, "models", "yolo11n.pt")
 
 # Initialize engine (reuses code with GCS backend)
