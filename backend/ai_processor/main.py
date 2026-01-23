@@ -5,12 +5,11 @@ Uses TrackingEngine for code sharing - EXACT SAME approach as mouse_hover_refact
 
 import os
 import time
-import cv2
 import numpy as np
 from collections import deque
 
 import AiStreamClient
-from AIEngine import TrackingEngine, TrackingConfig, ProcessingState, process_detection_mode, process_tracking_mode
+from AIEngine import TrackingEngine, ProcessingState, process_detection_mode, process_tracking_mode
 from GeoLocate import locate
 
 # Global Vars

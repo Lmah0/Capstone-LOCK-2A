@@ -10,7 +10,7 @@ import time
 import argparse
 from collections import deque
 
-from AIEngine import TrackingEngine, TrackingConfig, ProcessingState, process_detection_mode, process_tracking_mode
+from AIEngine import TrackingEngine, ProcessingState, process_detection_mode, process_tracking_mode
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Interactive object detection and tracking')
