@@ -8,8 +8,8 @@ class TrackingConfig:
     """Centralized configuration for all tracking and detection parameters"""
     
     # --- Frame Skipping ---
-    DETECTION_FRAME_SKIP = 2  # Skip N frames during detection phase (0=every frame, 1=every 2nd, 2=every 3rd)
-    TRACKER_FRAME_SKIP = 2    # Skip N frames during tracking phase (0=every frame, 1=every 2nd)
+    DETECTION_FRAME_SKIP = 1  # Skip N frames during detection phase (0=every frame, 1=every 2nd, 2=every 3rd)
+    TRACKER_FRAME_SKIP =   1    # Skip N frames during tracking phase (0=every frame, 1=every 2nd)
     
     # --- Detection Parameters ---
     CONFIDENCE_THRESHOLD = 0.1    # YOLO detection confidence threshold
