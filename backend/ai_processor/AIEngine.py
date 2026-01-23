@@ -8,8 +8,8 @@ class TrackingConfig:
     """Centralized configuration for all tracking and detection parameters"""
     
     # --- Frame Skipping ---
-    DETECTION_FRAME_SKIP = 2  # Skip N frames during detection phase (0=every frame, 1=every 2nd, 2=every 3rd)
-    TRACKER_FRAME_SKIP = 1    # Skip N frames during tracking phase (0=every frame, 1=every 2nd)
+    DETECTION_FRAME_SKIP = 1  # Skip N frames during detection phase (0=every frame, 1=every 2nd, 2=every 3rd)
+    TRACKER_FRAME_SKIP =   1    # Skip N frames during tracking phase (0=every frame, 1=every 2nd)
     
     # --- Detection Parameters ---
     CONFIDENCE_THRESHOLD = 0.1    # YOLO detection confidence threshold
@@ -51,21 +51,6 @@ class TrackingEngine:
         self.detection_history = []
         print(f"Engine: Started tracking Class {self.tracked_class}")
 
-    def update(self, frame, frame_count):
-        """Main update loop for tracking mode"""
-        if not self.is_tracking:
-            return False, None
-
-        # Update CSRT tracker
-        success, bbox = self.tracker.update(frame)
-
-        if success:
-            self.tracked_bbox = bbox
-            return True, self.tracked_bbox
-        else:
-            self.is_tracking = False
-            return False, None
-
 
 
 
@@ -86,6 +71,7 @@ class ProcessingState:
         self.frame_count = 0
         self.last_detection_results = None
         self.last_tracker_bbox = None
+        self.last_rendered_tracking_frame = None  # Cache rendered tracking frame
         
         # Fine-grained profiling timings (in ms)
         self.profile_inference_ms = 0.0      # YOLO model inference time
@@ -111,6 +97,7 @@ class ProcessingState:
         self.tracked_class = None
         self.tracked_bbox = None
         self.last_tracker_bbox = None
+        self.last_rendered_tracking_frame = None
     
     def start_tracking(self, frame, bbox, class_id):
         """Initialize tracking from a detection"""
@@ -268,17 +255,24 @@ def process_tracking_mode(frame, state):
         x, y, w, h = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         state.tracked_bbox = (x, y, w, h)
         
-        output_frame = frame.copy()
-        
-        # Draw gradient fill with transparency
-        overlay = output_frame.copy()
-        cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 255, 255), -1)
-        output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
-        
-        # Draw outline
-        cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 200, 200), 2)
-        cv2.putText(output_frame, f"Tracking {state.tracked_class}", (x, y - 10),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        # Only render when we actually update the tracker
+        if should_track:
+            output_frame = frame.copy()
+            
+            # Draw gradient fill with transparency
+            overlay = output_frame.copy()
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 255, 255), -1)
+            output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
+            
+            # Draw outline
+            cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 200, 200), 2)
+            cv2.putText(output_frame, f"Tracking class {state.tracked_class}", (x, y - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+            
+            state.last_rendered_tracking_frame = output_frame
+        else:
+            # Reuse cached frame on skipped frames
+            output_frame = state.last_rendered_tracking_frame
         
         return output_frame, True, False
     else:
