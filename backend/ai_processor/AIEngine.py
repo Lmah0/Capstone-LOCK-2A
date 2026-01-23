@@ -141,7 +141,9 @@ class ProcessingState:
         self.detection_ran_this_frame = False  # Track if detection actually ran this frame
         
         # Detailed inference breakdown
+        self.profile_frame_prep_ms = 0.0     # Frame preparation before model
         self.profile_model_predict_ms = 0.0  # Actual model.predict() call
+        self.profile_results_process_ms = 0.0  # Processing results after model
         
         # Input profiling
         self.profile_frame_shape = None
@@ -205,6 +207,8 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
     state.profile_inference_ms = 0.0
     state.profile_boxes_ms = 0.0
     state.profile_drawing_ms = 0.0
+    state.profile_frame_prep_ms = 0.0
+    state.profile_results_process_ms = 0.0
     state.detection_ran_this_frame = False
     
     if should_detect:
