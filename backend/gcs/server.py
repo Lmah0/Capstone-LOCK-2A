@@ -16,15 +16,7 @@ from dotenv import load_dotenv
 from videoStreaming.FrameTelemetrySynchronizer import FrameTelemetrySynchronizer
 from videoStreaming.receiveVideoStream import video_telemetry_sync_task
 import queue
-import base64
-import cv2
-import time
-import av
-import socket
 import threading
-from collections import deque
-from dataclasses import dataclass
-from datetime import datetime
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -32,11 +24,10 @@ AI_CMDS_LIST = ["click", "stop_tracking", "reselect_object", "mouse_move"]
 
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
-ai_command_connections: List[WebSocket] = []
+ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
 
-drone_frame_queue = queue.Queue()  # Raw frames FROM drone → TO AI processor
-ai_processed_frame_queue = queue.Queue()  # Processed frames FROM AI → TO frontend
-
+# Larger queue for video frames to handle bursts
+drone_frame_queue = queue.Queue()
 # Video stream configuration
 STREAM_URL = "udp://192.168.1.66:5000"  # Video from drone
 TIMESTAMP_PORT = 5001  # Timestamps from drone
@@ -311,198 +302,6 @@ async def websocket_ai_commands_endpoint(websocket: WebSocket):
     finally:
         if websocket in ai_command_connections:
             ai_command_connections.remove(websocket)
-
-
-@app.websocket("/ws/ai-frame-reader")
-async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
-    """Internal WebSocket endpoint to receive JPEG-encoded frames from the Detector Algorithm"""
-    await websocket.accept()
-    print("AI Frame Producer Connected.")
-    try:
-        # Expecting raw bytes (base64 encoded JPEG buffer)
-        while True:
-            # Receive base64 string from the AI process
-            base64_frame_data = await websocket.receive_text()
-
-            # Decode the base64 string back into raw JPEG bytes
-            jpeg_bytes = base64.b64decode(base64_frame_data)
-
-            # Put the new frame into the queue for the MJPEG streamer
-            try:
-                # Try to add frame without blocking
-                ai_processed_frame_queue.put_nowait(jpeg_bytes)
-            except queue.Full:
-                # Queue is full - skip this frame to maintain latency
-                pass
-
-    except WebSocketDisconnect:
-        print("AI Frame Producer disconnected.")
-    except Exception as e:
-        print(f"Error in /ws/ai_frame: {e}")
-    finally:
-        pass
-
-
-@app.websocket("/ws/camera-source")
-async def websocket_camera_source_endpoint(websocket: WebSocket):
-    """
-    Stream camera frames to AI processor.
-    Uses live video feed if available, otherwise falls back to mock MP4.
-    """
-    await websocket.accept()
-    print("AI Processor connected to camera source")
-
-    # Try to use live video feed from the queue
-    use_live_feed = (
-        not drone_frame_queue.empty() or len(frame_telemetry_sync.frame_buffer) > 0
-    )
-
-    if use_live_feed:
-        print("Using LIVE video feed from drone")
-        await stream_live_feed_to_ai(websocket)
-    else:
-            print("Using MOCK video feed (MP4 file)")
-            await stream_mock_feed_to_ai(websocket)
-
-
-async def stream_live_feed_to_ai(websocket: WebSocket):
-    """Stream live video frames from drone to AI processor"""
-    frame_timeout_count = 0
-    max_timeout = 10  # Switch to mock video after 10 consecutive timeouts
-
-    try:
-        while True:
-            try:
-                # Get frame from queue with short timeout
-                jpeg_bytes = await asyncio.to_thread(drone_frame_queue.get, timeout=0.5)
-
-                # Reset timeout counter on successful frame
-                frame_timeout_count = 0
-
-                # Send as base64 to AI processor
-                base64_frame = base64.b64encode(jpeg_bytes).decode("utf-8")
-                await websocket.send_text(base64_frame)
-
-            except queue.Empty:
-                frame_timeout_count += 1
-
-                # If frame not received after max timeout, switch to mock
-                if frame_timeout_count >= max_timeout:
-                    print("⚠ Live feed timeout - switching to mock video")
-                    await stream_mock_feed_to_ai(websocket)
-                    break
-
-                await asyncio.sleep(0.01)
-
-    except WebSocketDisconnect:
-        print("AI Processor disconnected from live feed")
-    except Exception as e:
-        print(f"Error in live feed: {e}")
-
-
-async def stream_mock_feed_to_ai(websocket: WebSocket):
-    """Stream mock video from MP4 file to AI processor"""
-    BASE_DIR = os.path.dirname(__file__)  # the directory where server.py lives
-    VIDEO_PATH = os.path.join(BASE_DIR, "video.mp4")
-    cap = cv2.VideoCapture(VIDEO_PATH)
-
-    if not cap.isOpened():
-        print(f"Error: Could not open video file at {VIDEO_PATH}")
-        await websocket.close()
-        return
-
-    try:
-        while True:
-            ret, frame = cap.read()
-
-            if not ret:
-                # Loop video
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
-            success, buffer = cv2.imencode(
-                ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95]
-            )
-            if not success:
-                continue
-
-            base64_frame = base64.b64encode(buffer.tobytes()).decode("utf-8")
-            await websocket.send_text(base64_frame)
-
-            # Control frame rate (~30 fps for mock)
-            await asyncio.sleep(1 / 30)
-
-    except WebSocketDisconnect:
-        print("AI Processor disconnected from mock feed")
-    except Exception as e:
-        print(f"Error in mock feed: {e}")
-    finally:
-        cap.release()
-
-
-async def generate_video_frames():
-    """Reads JPEG frames from the queue and formats them for MJPEG streaming"""
-    frame_boundary = b"--frame\r\n"
-    content_type = b"Content-Type: image/jpeg\r\n\r\n"
-
-    while True:
-        try:
-            # 1. Wait for a new frame
-            jpeg_frame = await asyncio.to_thread(ai_processed_frame_queue.get, timeout=0.5)
-
-            yield frame_boundary
-            yield content_type
-            yield jpeg_frame
-            yield b"\r\n"
-
-        except queue.Empty:
-            # If the queue is empty, wait briefly and continue
-            await asyncio.sleep(0.0005)  # 0.5ms sleep
-
-        except Exception as e:
-            print(f"Error yielding frame: {e}")
-            break
-
-
-@app.get("/video_feed")
-async def video_feed():
-    """Stream video frames via MJPEG"""
-    media_type = "multipart/x-mixed-replace; boundary=frame"
-    return StreamingResponse(generate_video_frames(), media_type=media_type)
-
-
-@app.get("/sync-stats")
-async def get_sync_stats():
-    """Get synchronization statistics"""
-    total_frames = len(frame_telemetry_sync.frame_buffer)
-    frames_with_telemetry = sum(
-        1 for f in frame_telemetry_sync.frame_buffer if f.telemetry is not None
-    )
-
-    sync_diffs = [
-        f.telemetry["sync_time_diff_ms"]
-        for f in frame_telemetry_sync.frame_buffer
-        if f.telemetry is not None
-    ]
-
-    stats = {
-        "total_frames": total_frames,
-        "frames_with_telemetry": frames_with_telemetry,
-        "match_rate": (
-            (frames_with_telemetry / total_frames * 100) if total_frames > 0 else 0
-        ),
-        "telemetry_buffer_size": len(frame_telemetry_sync.telemetry_buffer),
-    }
-
-    if sync_diffs:
-        stats["avg_sync_diff_ms"] = sum(sync_diffs) / len(sync_diffs)
-        stats["max_sync_diff_ms"] = max(sync_diffs)
-        stats["min_sync_diff_ms"] = min(sync_diffs)
-
-    return stats
-
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=8766, reload=True)
