@@ -7,7 +7,7 @@ import os
 import time
 import numpy as np
 from collections import deque
-
+import asyncio
 import AiStreamClient
 from AIEngine import TrackingEngine, ProcessingState, process_detection_mode, process_tracking_mode
 from GeoLocate import locate
@@ -40,39 +40,13 @@ def print_fps():
     fps = 1000.0 / avg_frame_time if avg_frame_time > 0 else 0
     mode = "TRACKING" if state.tracking else "DETECTION"
     
-    avg_get = np.mean(get_frame_times) if len(get_frame_times) > 0 else 0
-    avg_send = np.mean(send_frame_times) if len(send_frame_times) > 0 else 0
-    
-    print(f"\n[Frame {state.frame_count}] [{mode} MODE] FPS: {fps:.1f} (avg frame: {avg_frame_time:.2f}ms)")
-    
-    # WebSocket timing
-    print(f"  WebSocket I/O:")
-    print(f"    ├─ Get Frame:  {avg_get:.2f}ms")
-    print(f"    └─ Send Frame: {avg_send:.2f}ms")
-    
-    # Print detailed breakdown for DETECTION mode
-    if not state.tracking:
-        if state.detection_ran_this_frame:
-            print(f"  Input Profiling:")
-            print(f"    Frame: {state.profile_frame_shape} dtype={state.profile_frame_dtype} device={state.profile_frame_device}")
-            print(f"    Model Device: {state.profile_model_device}")
-            print(f"  Detection Profiling (detection ran this frame):")
-            print(f"    ├─ Model Inference:  {state.profile_inference_ms:.2f}ms")
-            print(f"    │  ├─ Frame Prep:      {state.profile_frame_prep_ms:.2f}ms")
-            print(f"    │  ├─ Model Predict:   {state.profile_model_predict_ms:.2f}ms (BOTTLENECK CHECK)")
-            print(f"    │  └─ Results Proc:    {state.profile_results_process_ms:.2f}ms")
-            print(f"    ├─ Extract Boxes:    {state.profile_boxes_ms:.2f}ms")
-            print(f"    └─ Drawing/Overlay:  {state.profile_drawing_ms:.2f}ms")
-            total_detection_time = state.profile_inference_ms + state.profile_boxes_ms + state.profile_drawing_ms
-            print(f"    Total Detection:     {total_detection_time:.2f}ms")
-        else:
-            print(f"  (Using cached detection from previous frame - no inference run)")
-    print()
+    # print(f"\n[Frame {state.frame_count}] [{mode} MODE] FPS: {fps:.1f} (avg frame: {avg_frame_time:.2f}ms)")
 
 print("AI Processor started, waiting for frames...")
 
 try:
     AiStreamClient.initialize_video(VIDEO_PATH) # Start Playing Mocked Video
+    AiStreamClient.set_processing_state(state)  # Pass state reference to AiStreamClient
     AiStreamClient.initialize() # Start up WebSocket & WebRTC
     
     # Track WebSocket timing

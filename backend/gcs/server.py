@@ -1,11 +1,11 @@
 """ Main server for Ground Control Station (GCS) backend. """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 import uvicorn
 import asyncio
 import json
 import websockets
+import aiohttp
 from contextlib import asynccontextmanager
 from typing import List
 import os
@@ -19,6 +19,7 @@ AI_CMDS_LIST = ["click", "stop_tracking", "reselect_object", "mouse_move"]
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
+current_tracked_class: str = "Unknown"  # Store tracked class from AI processor
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -113,7 +114,7 @@ def delete_object_endpoint(object_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
 @app.post("/record")
-def record(request: dict = Body(...)):
+async def record(request: dict = Body(...)):
     """Record tracked object data"""
     data = request.get("data")
     if not data:
@@ -125,8 +126,21 @@ def record(request: dict = Body(...)):
         missing = [f for f in required_fields if point.get(f) is None]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
+    
+    # Fetch current tracked class from AI processor
+    tracked_class = "Unknown"
     try:
-        record_telemetry_data(data, classification='Unknown')
+        ai_processor_url = f"http://localhost:{os.getenv('WEBRTC_PORT', 8767)}/tracked-class"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(ai_processor_url) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    tracked_class = result.get("tracked_class") or "Unknown"
+    except Exception as e:
+        print(f"Failed to fetch tracked class: {e}")
+    
+    try:
+        record_telemetry_data(data, classification=tracked_class)
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
@@ -180,9 +194,19 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = json.loads(message)
                 command_type = data.get("type")
-
+                
+                # Handle tracking state updates from AI processor
+                if command_type == "tracking_state_update":
+                    global current_tracked_class
+                    tracked_class = data.get("tracked_class")
+                    is_tracking = data.get("is_tracking", False)
+                    if is_tracking and tracked_class:
+                        current_tracked_class = tracked_class
+                    else:
+                        current_tracked_class = "Unknown"
+                    print(f"Updated tracking class: {current_tracked_class}")
                 # Relay AI-related commands to the AI processor
-                if command_type in AI_CMDS_LIST:
+                elif command_type in AI_CMDS_LIST:
                     await send_data_to_connections(data, ai_command_connections)
 
             except json.JSONDecodeError:

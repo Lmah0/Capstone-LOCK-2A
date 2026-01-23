@@ -50,6 +50,7 @@ COMMAND_WS_URL = f"ws://{BACKEND_HOST}:{BACKEND_PORT}/ws/ai-commands"
 # Global state 
 _main_loop = None
 _main_thread = None
+_processing_state = None  # Reference to ProcessingState from main.py
 
 # Video Input (CV2)
 _video_capture = None
@@ -244,6 +245,16 @@ def push_frame(frame: np.ndarray):
     with _output_frame_lock:
         _output_frame = frame.copy()
 
+@_app.get("/tracked-class")
+async def get_tracked_class():
+    """Return the current tracked class from the AI processor"""
+    if _processing_state is None:
+        return {"tracked_class": None, "is_tracking": False}
+    return {
+        "tracked_class": _processing_state.tracked_class if _processing_state.tracking else None,
+        "is_tracking": _processing_state.tracking
+    }
+
 @_app.post("/offer")
 async def handle_offer(offer: RTCOffer):
     """Endpoint that handles WebRTC offer from frontend and return answer"""
@@ -309,6 +320,11 @@ def initialize_video(video_path: str = None) -> bool:
 
     print(f"Video capture initialized: {video_path}")
     return True
+
+def set_processing_state(state):
+    """Set the processing state reference from main.py"""
+    global _processing_state
+    _processing_state = state
 
 def get_video_frame():
     """ Get the next frame from the video capture. Automatically loops when video ends."""
