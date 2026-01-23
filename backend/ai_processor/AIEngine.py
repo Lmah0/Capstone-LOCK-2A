@@ -146,6 +146,7 @@ class ProcessingState:
         # Input profiling
         self.profile_frame_shape = None
         self.profile_frame_dtype = None
+        self.profile_frame_device = "unknown"  # CPU or GPU
         self.profile_model_device = "unknown"
     
     def reset_tracking(self):
@@ -212,6 +213,7 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
         # Profile frame inputs
         state.profile_frame_shape = frame.shape
         state.profile_frame_dtype = str(frame.dtype)
+        state.profile_frame_device = "GPU" if state.gpu_available else "CPU"
         
         # Profile model device
         try:
