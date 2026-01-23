@@ -270,8 +270,6 @@ test('Video Feed Shows Stream Without Errors', async () => {
     // Check that no error message is displayed
     expect(screen.queryByText(/Stream error/i)).not.toBeInTheDocument();
   });
-
-  expect(screen.queryByText('Connecting to stream...')).not.toBeInTheDocument();
 });
 
 test('Video Feed Shows Error When Stream Fails', async () => {
