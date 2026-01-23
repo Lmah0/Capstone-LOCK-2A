@@ -7,7 +7,7 @@ import os
 import time
 import numpy as np
 from collections import deque
-
+import asyncio
 import AiStreamClient
 from AIEngine import TrackingEngine, ProcessingState, process_detection_mode, process_tracking_mode
 from GeoLocate import locate
@@ -24,7 +24,7 @@ engine = TrackingEngine(MODEL_PATH)
 model = engine.model
 
 # Initialize processing state 
-state = ProcessingState()
+state = ProcessingState(model=model)
 
 # Basic FPS tracking (minimal overhead)
 STATS_WINDOW = 100
@@ -42,14 +42,14 @@ def print_fps():
     
     avg_get = np.mean(get_frame_times) if len(get_frame_times) > 0 else 0
     avg_send = np.mean(send_frame_times) if len(send_frame_times) > 0 else 0
-    
+
     print(f"\n[Frame {state.frame_count}] [{mode} MODE] FPS: {fps:.1f} (avg frame: {avg_frame_time:.2f}ms)")
-    
+
     # WebSocket timing
     print(f"  WebSocket I/O:")
     print(f"    ├─ Get Frame:  {avg_get:.2f}ms")
     print(f"    └─ Send Frame: {avg_send:.2f}ms")
-    
+
     # Print detailed breakdown for DETECTION mode
     if not state.tracking:
         if state.detection_ran_this_frame:
@@ -73,6 +73,7 @@ print("AI Processor started, waiting for frames...")
 
 try:
     AiStreamClient.initialize_video(VIDEO_PATH) # Start Playing Mocked Video
+    AiStreamClient.set_processing_state(state)  # Pass state reference to AiStreamClient
     AiStreamClient.initialize() # Start up WebSocket & WebRTC
     
     # Track WebSocket timing

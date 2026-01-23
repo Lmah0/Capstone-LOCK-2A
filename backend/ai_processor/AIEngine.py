@@ -100,7 +100,7 @@ class TrackingEngine:
         
         self.tracker.init(frame, bbox)
         self.tracked_bbox = bbox
-        self.tracked_class = class_id
+        self.tracked_class = self.model.names[class_id]
         self.is_tracking = True
         print(f"Engine: Started tracking Class {class_id} with {self.tracker_type.upper()} tracker")
 
@@ -116,7 +116,8 @@ class TrackingEngine:
 
 class ProcessingState:
     """Manages state for detection/tracking processing"""
-    def __init__(self):
+    def __init__(self, model=None):
+        self.model = model
         self.tracking = False
         self.tracker = None
         self.tracked_class = None
@@ -162,10 +163,10 @@ class ProcessingState:
             self.tracker = cv2.TrackerCSRT.create()
         
         self.tracker.init(frame, bbox)
-        self.tracked_class = class_id
+        self.tracked_class = self.model.names[class_id]
         self.tracked_bbox = bbox
         self.tracking = True
-        print(f"Started tracking object, class {class_id}")
+        print(f"Started tracking object, class {self.tracked_class}")
     
     def increment_frame(self):
         """Increment frame counter"""
@@ -268,12 +269,15 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
                 overlay = output_frame.copy()
                 cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), -1)
                 output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
-                cv2.putText(output_frame, f"Class {int(classes[i])}", (x1, y1 - 10),
+                
+                class_id = int(classes[i])
+                class_name = model.names[class_id]
+                cv2.putText(output_frame, class_name, (x1, y1 - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 # Click = start tracking
                 if click_pos is not None:
-                    state.start_tracking(frame, (x1, y1, x2 - x1, y2 - y1), int(classes[i]))
+                    state.start_tracking(frame, (x1, y1, x2 - x1, y2 - y1), class_id)
                     mode_changed = True
                     break
         state.profile_drawing_ms = (time.time() - t_drawing_start) * 1000
