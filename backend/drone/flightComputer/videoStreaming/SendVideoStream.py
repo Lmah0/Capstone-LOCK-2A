@@ -10,158 +10,110 @@ from .benchmarking.benchmarkSendingVideoStream import benchmark_video_quality
 from fractions import Fraction
 
 VIDEO_INPUT_DEVICE = "/dev/video0"
-OUTPUT_URL = "udp://192.168.1.82:5000"
-TIMESTAMP_URL = ("192.168.1.82", 5001)
-
-# Original FFmpeg command for benchmarking
-ffmpeg_command = [
-    "ffmpeg",
-    "-f",
-    "v4l2",
-    "-framerate",
-    "60",
-    "-video_size",
-    "1280x720",
-    "-i",
-    VIDEO_INPUT_DEVICE,
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-tune",
-    "zerolatency",
-    "-x264-params",
-    "aud=1:repeat-headers=1",
-    "-f",
-    "mpegts",
-    OUTPUT_URL,
-]
+GCS_VIDEO_IP = "udp://192.168.1.82:5000"
+GCS_TIMESTAMP_IP = ("192.168.1.82", 5001)
+TIMESTAMP_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
-class TimestampedVideoSender:
-    """Send video with JSON timestamps on separate port"""
+def setup_video_pipeline():
+    """Helper: Handles all the complex PyAV / FFmpeg configuration"""
+    # Open input camera
+    input_container = av.open(
+        VIDEO_INPUT_DEVICE,
+        format="v4l2",
+        options={
+            "framerate": "30",
+            "video_size": "1280x720",
+            "input_format": "h264",
+        },
+    )
 
-    def __init__(self, input_device, video_output_url, timestamp_output):
-        self.input_device = input_device
-        self.video_output_url = video_output_url
-        self.timestamp_output = timestamp_output
-        self.timestamp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Open output stream
+    output_container = av.open(GCS_VIDEO_IP, "w", format="mpegts")
+    
+    # Configure output stream
+    video_stream = output_container.add_stream("libx264", rate=30)
+    video_stream.width = 1280
+    video_stream.height = 720
+    video_stream.pix_fmt = "yuv420p"
+    video_stream.options = {
+        "preset": "ultrafast",
+        "tune": "zerolatency",
+        "maxrate": "3M",
+        "bufsize": "6M",
+        "g": "30",
+        "x264-params": "aud=1:repeat-headers=1:slice-max-size=1200",
+    }
+    
+    return input_container, output_container, video_stream
 
-    def send_video(self):
-        print(f"Starting timestamped video stream...")
-        print(f"  Video stream:     {self.video_output_url}")
-        print(
-            f"  Timestamp stream: udp://{self.timestamp_output[0]}:{self.timestamp_output[1]}"
-        )
+def send_timestamp_packet(frame_count, capture_time, start_time):
+    """Helper: Handles purely the JSON packaging and UDP sending"""
+    timestamp_data = {
+        "frame_number": frame_count,
+        "wall_clock_time": capture_time,
+        "datetime": datetime.fromtimestamp(capture_time).isoformat(),
+        "pts": frame_count,
+        "elapsed_seconds": capture_time - start_time,
+    }
 
-        # Open input camera
-        input_container = av.open(
-            self.input_device,
-            format="v4l2",
-            options={
-                "framerate": "30",
-                "video_size": "1280x720",
-                "input_format": "h264",
-            },
-        )
+    try:
+        message = json.dumps(timestamp_data).encode("utf-8")
+        TIMESTAMP_SOCKET.sendto(message, GCS_TIMESTAMP_IP)
+    except Exception as e:
+        print(f"Timestamp send error: {e}")
 
-        # Open output stream
-        output_container = av.open(self.video_output_url, "w", format="mpegts")
+def start_video_streaming(timestamps_enabled=True):
+    """The Main Conductor: Orchestrates the loop"""
+    print(f"Starting video streaming to {GCS_VIDEO_IP} with timestamps: {timestamps_enabled}")
+    
+    # Setup video pipeline
+    input_container, output_container, video_stream = setup_video_pipeline()
+    input_stream = input_container.streams.video[0]
 
-        input_stream = input_container.streams.video[0]
+    frame_count = 0
+    start_time = time.time()
 
-        # Configure video stream
-        video_stream = output_container.add_stream("libx264", rate=30)
-        video_stream.width = 1280
-        video_stream.height = 720
-        video_stream.pix_fmt = "yuv420p"
-        video_stream.options = {
-            "preset": "ultrafast",
-            "tune": "zerolatency",
-            "crf": "21",
-            "maxrate": "3M",
-            "bufsize": "6M",
-            "g": "30",
-            "x264-params": "aud=1:repeat-headers=1:slice-max-size=1200:intra-refresh=1",
-        }
+    try:
+        # Send and timestamp packets
+        for packet in input_container.demux(input_stream):
+            for frame in packet.decode():
+                capture_time = time.time() 
+                
+                # Send Video
+                frame.pts = frame_count
+                frame.time_base = Fraction(1, 30)
+                for video_packet in video_stream.encode(frame):
+                    output_container.mux(video_packet)
 
-        frame_count = 0
-        start_time = time.time()
+                # Send Timestamp (Delegated to helper)
+                if timestamps_enabled:
+                    send_timestamp_packet(frame_count, capture_time, start_time)
 
-        try:
-            for packet in input_container.demux(input_stream):
-                for frame in packet.decode():
-                    # CRITICAL: Capture wall-clock timestamp immediately
-                    capture_time = time.time()
+                # Logging
+                if frame_count % 30 == 0:
+                    elapsed = capture_time - start_time
+                    print(f"Frame {frame_count} | Elapsed: {elapsed:.2f}s")
 
-                    # Set video frame PTS
-                    frame.pts = frame_count
-                    frame.time_base = Fraction(1, 30)
+                frame_count += 1
 
-                    # Encode and mux video frame
-                    for video_packet in video_stream.encode(frame):
-                        output_container.mux(video_packet)
-
-                    # Send JSON timestamp packet
-                    timestamp_data = {
-                        "frame_number": frame_count,
-                        "wall_clock_time": capture_time,
-                        "datetime": datetime.fromtimestamp(capture_time).isoformat(),
-                        "pts": frame_count,
-                        "elapsed_seconds": capture_time - start_time,
-                    }
-
-                    message = json.dumps(timestamp_data).encode("utf-8")
-                    self.timestamp_sock.sendto(message, self.timestamp_output)
-
-                    # Print status every second
-                    if frame_count % 30 == 0:
-                        dt = datetime.fromtimestamp(capture_time)
-                        elapsed = capture_time - start_time
-                        print(
-                            f"Frame {frame_count:5d} | "
-                            f"Time: {dt.strftime('%H:%M:%S.%f')[:-3]} | "
-                            f"Elapsed: {elapsed:.2f}s"
-                        )
-
-                    frame_count += 1
-
-        except KeyboardInterrupt:
-            print("\nStreaming stopped by user.")
-        except Exception as e:
-            print(f"\nError: {e}")
-            import traceback
-
-            traceback.print_exc()
-        finally:
+    except KeyboardInterrupt:
+        print("\nStreaming stopped by user.")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Cleanup Phase
+        if output_container:
             for packet in video_stream.encode():
                 output_container.mux(packet)
-
             output_container.close()
+        
+        if input_container:
             input_container.close()
-            self.timestamp_sock.close()
-            print(f"Stream ended. Total frames sent: {frame_count}")
+            
+        TIMESTAMP_SOCKET.close()
 
-
-def send_video(cmd):
-    """Original FFmpeg-based sender (for benchmarking)"""
-    print("Starting FFmpeg stream...")
-    process = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-    try:
-        for line in process.stderr:
-            print(line, end="")
-    except KeyboardInterrupt:
-        print("Streaming stopped.")
-    finally:
-        process.terminate()
-
-
-def send_video_with_timestamps():
-    """Send video with timestamps on separate port"""
-    sender = TimestampedVideoSender(VIDEO_INPUT_DEVICE, OUTPUT_URL, TIMESTAMP_URL)
-    sender.send_video()
 
 
 if __name__ == "__main__":
@@ -169,16 +121,16 @@ if __name__ == "__main__":
         "Select an option:\n"
         "1: Benchmark FFmpeg Performance\n"
         "2: Benchmark Stream Video Quality\n"
-        "3: Send video with timestamps (2 ports)\n"
-        "Press Enter to start live video streaming (FFmpeg)\n"
+        "3: Stream Video Only\n"
+        "Press Enter to send video with timestamps (2 ports)\n"
         "Enter your choice: "
     )
 
     if user_selection == "1":
-        benchmark_ffmpeg(ffmpeg_command, duration=60)
+        benchmark_ffmpeg(setup_video_pipeline(), duration=60)
     elif user_selection == "2":
         benchmark_video_quality(duration=30)
     elif user_selection == "3":
-        send_video_with_timestamps()
+        start_video_streaming(timestamps_enabled=False)
     else:
-        send_video(ffmpeg_command)
+        start_video_streaming(timestamps_enabled=True)

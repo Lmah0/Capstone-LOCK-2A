@@ -9,7 +9,7 @@ import random
 from contextlib import asynccontextmanager
 from typing import List
 import os
-from videoStreaming.SendVideoStream import send_video_with_timestamps
+from videoStreaming.SendVideoStream import start_video_streaming
 from dotenv import load_dotenv
 import datetime
 import threading
@@ -28,7 +28,7 @@ vehicle_connection = None
 vehicle_ip = "udp:127.0.0.1:5006"  # Need to run mavproxy module on 5006
 
 vehicle_data = {
-    "last_time": -1.0,
+    "timestamp": -1.0,
     "latitude": -1.0,
     "longitude": -1.0,
     "altitude": -1.0,
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     # vehicle_connection = connect_to_vehicle()
     # print("Vehicle connection established.")
 
-    video_thread = threading.Thread(target=send_video_with_timestamps, daemon=True)
+    video_thread = threading.Thread(target=lambda: start_video_streaming(True), daemon=True)
     video_thread.start()
     print("Video streaming thread started")
     time.sleep(0.5)  # Give some time for the thread to start
