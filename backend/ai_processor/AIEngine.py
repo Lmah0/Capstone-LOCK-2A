@@ -225,20 +225,15 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
         except:
             state.profile_model_device = "unknown"
         
-        # GPU optimization: Move frame to GPU upfront (single transfer)
-        inference_frame = frame
-        state.profile_frame_to_gpu_ms = 0.0
-        if state.gpu_available:
-            t_gpu_transfer = time.time()
-            # Convert uint8 [0-255] to float32 [0-1] on GPU in one operation
-            inference_frame = torch.from_numpy(frame).float().cuda() / 255.0
-            state.profile_frame_to_gpu_ms = (time.time() - t_gpu_transfer) * 1000
-        
-        # Time the actual model inference with fp16 for memory efficiency
+        # Time the actual model inference
+        # YOLO handles frame format conversion internally, optimized for numpy HWC format
+        # Use device=0 to keep operations on GPU, half=True for fp16 memory efficiency
         t_model_start = time.time()
-        results = model.predict(inference_frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD,
-                               iou=TrackingConfig.MODEL_IOU, device=0 if state.gpu_available else 'cpu',
-                               half=state.gpu_available, verbose=False)
+        results = model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD,
+                               iou=TrackingConfig.MODEL_IOU, 
+                               device=0 if state.gpu_available else 'cpu',
+                               half=state.gpu_available, 
+                               verbose=False)
         state.profile_model_predict_ms = (time.time() - t_model_start) * 1000
         
         # GPU optimization: Transfer results to CPU ONCE after detection
