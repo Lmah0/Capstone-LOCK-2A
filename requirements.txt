@@ -10,6 +10,8 @@ opencv-contrib-python==4.12.0.88
 ultralytics==8.4.3
 torch==2.5.1
 geographiclib==2.1
+av
+aiortc
 # Testing Dependencies
 pytest
 pytest-asyncio
