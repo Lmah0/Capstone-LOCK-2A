@@ -1,8 +1,10 @@
+import os
+import time
+
 import cv2
 import numpy as np
-import time
+import torch
 from ultralytics import YOLO
-import os
 
 class TrackingConfig:
     """Centralized configuration for all tracking and detection parameters"""
@@ -14,6 +16,31 @@ class TrackingConfig:
     # --- Detection Parameters ---
     CONFIDENCE_THRESHOLD = 0.1    # YOLO detection confidence threshold
     MODEL_IOU = 0.5               # NMS IOU threshold for YOLO
+    
+    # --- Tracker Configuration ---
+    PREFER_GPU_TRACKER = True     # Use VitTrack if available, otherwise use CSRT
+    TRACKER_TYPE = None           # Will be auto-detected: 'vittrack' or 'csrt'
+    VITTRACK_MODEL = None          # Path to VitTrack model file
+
+def _init_tracker_config():
+    """Initialize tracker type based on GPU availability"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    vittrack_model_path = os.path.join(base_dir, "models", "object_tracking_vittrack_2023sep.onnx")
+    
+    if TrackingConfig.PREFER_GPU_TRACKER and os.path.exists(vittrack_model_path):
+        TrackingConfig.TRACKER_TYPE = 'vittrack'
+        TrackingConfig.VITTRACK_MODEL = vittrack_model_path
+        gpu_available = torch.cuda.is_available()
+        device = "GPU" if gpu_available else "CPU"
+        print(f"✓ VitTrack model found. Using VitTrack tracker ({device}-optimized)")
+    else:
+        if TrackingConfig.PREFER_GPU_TRACKER and not os.path.exists(vittrack_model_path):
+            print(f"⚠ VitTrack model not found at {vittrack_model_path}. Using CSRT tracker.")
+        TrackingConfig.TRACKER_TYPE = 'csrt'
+        print("Using CSRT tracker (CPU)")
+
+_init_tracker_config()
+
 
 class TrackingEngine:
     def __init__(self, model_path):
@@ -26,6 +53,7 @@ class TrackingEngine:
         # Public attributes for high-performance direct access (hot path)
         self.model = YOLO(model_path)
         self.tracker = None  # Created on-demand in start_tracking()
+        self.tracker_type = TrackingConfig.TRACKER_TYPE
         
         # State
         self.is_tracking = False
@@ -40,15 +68,42 @@ class TrackingEngine:
                                    iou=TrackingConfig.MODEL_IOU, verbose=False)
         return results[0]
 
+    def _load_vittrack(self):
+        """Initialize VitTrack tracker with GPU acceleration if available"""
+        try:
+            params = cv2.TrackerVit_Params()
+            params.net = TrackingConfig.VITTRACK_MODEL
+            
+            # GPU acceleration via OpenCV DNN if available
+            if torch.cuda.is_available():
+                params.backend = cv2.dnn.DNN_BACKEND_CUDA
+                params.target = cv2.dnn.DNN_TARGET_CUDA
+                print("VitTrack: Using CUDA acceleration")
+            else:
+                params.backend = cv2.dnn.DNN_BACKEND_DEFAULT
+                params.target = cv2.dnn.DNN_TARGET_CPU
+            
+            return cv2.TrackerVit.create(params)
+        except Exception as e:
+            print(f"VitTrack initialization failed: {e}. Falling back to CSRT.")
+            return None
+
     def start_tracking(self, frame, bbox, class_id):
-        """Initialize CSRT Tracker"""
-        # Create new tracker for each tracking session (can't reuse after failure)
-        self.tracker = cv2.TrackerCSRT.create()
+        """Initialize tracker (VitTrack if available, else CSRT)"""
+        if self.tracker_type == 'vittrack':
+            self.tracker = self._load_vittrack()
+        
+        # Fall back to CSRT if VitTrack failed or not available
+        if self.tracker is None:
+            self.tracker = cv2.TrackerCSRT.create()
+            self.tracker_type = 'csrt'
+        
         self.tracker.init(frame, bbox)
         self.tracked_bbox = bbox
         self.tracked_class = class_id
         self.is_tracking = True
-        print(f"Engine: Started tracking Class {class_id}")
+        print(f"Engine: Started tracking Class {class_id} with {self.tracker_type.upper()} tracker")
+
 
 
 
@@ -99,7 +154,13 @@ class ProcessingState:
     
     def start_tracking(self, frame, bbox, class_id):
         """Initialize tracking from a detection"""
-        self.tracker = cv2.TrackerCSRT.create()
+        if TrackingConfig.TRACKER_TYPE == 'dasiamrpn':
+            # For DaSiamRPN - would need full implementation
+            # For now, fall back to CSRT in ProcessingState
+            self.tracker = cv2.TrackerCSRT.create()
+        else:
+            self.tracker = cv2.TrackerCSRT.create()
+        
         self.tracker.init(frame, bbox)
         self.tracked_class = class_id
         self.tracked_bbox = bbox
