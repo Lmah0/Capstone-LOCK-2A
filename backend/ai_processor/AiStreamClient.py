@@ -26,7 +26,6 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path="../../.env")
 
-# FastAPI app for WebRTC signaling
 _app = FastAPI()
 _app.add_middleware(
     CORSMiddleware,
@@ -46,7 +45,6 @@ class RTCOffer(BaseModel):
 BACKEND_PORT = os.getenv('GCS_BACKEND_PORT')
 BACKEND_HOST = os.getenv('BACKEND_GCS_HOST', 'localhost')  # 'backend-gcs' in Docker, 'localhost' locally
 WEBRTC_PORT = int(os.getenv("WEBRTC_PORT", 8767))
-
 COMMAND_WS_URL = f"ws://{BACKEND_HOST}:{BACKEND_PORT}/ws/ai-commands"
 
 # Global state 
@@ -222,7 +220,7 @@ class AIVideoStreamTrack(VideoStreamTrack):
             # Wrap numpy array in a VideoFrame object for aiortc
             video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
             
-             # Attach timing info so client knows when to display this frame
+            # Attach timing info so parent client (VideoStreamTrack) knows when to display this frame
             video_frame.pts = pts
             video_frame.time_base = time_base
 

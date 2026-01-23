@@ -11,9 +11,6 @@ from typing import List
 import os
 from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
-import queue
-import base64
-import cv2
 
 load_dotenv(dotenv_path="../../.env")
 

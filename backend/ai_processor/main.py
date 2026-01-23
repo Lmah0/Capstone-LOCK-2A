@@ -73,7 +73,7 @@ print("AI Processor started, waiting for frames...")
 
 try:
     AiStreamClient.initialize_video(VIDEO_PATH) # Start Playing Mocked Video
-    AiStreamClient.initialize() # 
+    AiStreamClient.initialize() # Start up WebSocket & WebRTC
     
     # Track WebSocket timing
     get_frame_times = deque(maxlen=100)
