@@ -131,6 +131,7 @@ export default function VideoFeed() {
 
                 ws.onopen = () => {
                     console.log('WebSocket connected');
+                    setConnectionState('connected');
                 };
 
                 ws.onclose = () => {
