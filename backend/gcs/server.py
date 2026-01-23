@@ -195,18 +195,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 data = json.loads(message)
                 command_type = data.get("type")
                 
-                # Handle tracking state updates from AI processor
-                if command_type == "tracking_state_update":
-                    global current_tracked_class
-                    tracked_class = data.get("tracked_class")
-                    is_tracking = data.get("is_tracking", False)
-                    if is_tracking and tracked_class:
-                        current_tracked_class = tracked_class
-                    else:
-                        current_tracked_class = "Unknown"
-                    print(f"Updated tracking class: {current_tracked_class}")
-                # Relay AI-related commands to the AI processor
-                elif command_type in AI_CMDS_LIST:
+                if command_type in AI_CMDS_LIST:
                     await send_data_to_connections(data, ai_command_connections)
 
             except json.JSONDecodeError:
