@@ -19,7 +19,6 @@ AI_CMDS_LIST = ["click", "stop_tracking", "reselect_object", "mouse_move"]
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
-current_tracked_class: str = "Unknown"  # Store tracked class from AI processor
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -195,6 +194,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 data = json.loads(message)
                 command_type = data.get("type")
                 
+                # Relay AI-related commands to the AI processor
                 if command_type in AI_CMDS_LIST:
                     await send_data_to_connections(data, ai_command_connections)
 
