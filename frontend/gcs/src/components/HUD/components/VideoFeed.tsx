@@ -129,19 +129,27 @@ export default function VideoFeed() {
             try {
                 const ws = new WebSocket(gcsServerUrl);
 
-                ws.onopen = () => {};
+                ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    setIsStreaming(true);
+                };
 
                 ws.onclose = () => {
+                    console.log('WebSocket disconnected, reconnecting...');
+                    setIsStreaming(false);
                     setTimeout(connectWebSocket, 3000);
                 };
 
                 ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
+                    setIsStreaming(false);
+                    setError('WebSocket connection error');
                 };
+
 
                 wsRef.current = ws;
             } catch (error) {
-                console.error('WebSocket connection failed:', error);
+                console.error('Failed to connect WebSocket:', error);
+                setIsStreaming(false);
                 setTimeout(connectWebSocket, 3000);
             }
         };
@@ -257,7 +265,10 @@ export default function VideoFeed() {
                         playsInline
                         muted
                         className={`absolute inset-0 w-full h-full object-cover cursor-crosshair ${isStreaming ? 'opacity-100' : 'opacity-50'}`}
-                        onMouseMove={handleMouseMove}
+                        onError={() => {
+                            setIsStreaming(false);
+                            setError("Stream error. Is the Python server running?");
+                        }}                        onMouseMove={handleMouseMove}
                         onClick={handleClick}
                         onError={(e) => console.error('Video error:', e)}
                     />

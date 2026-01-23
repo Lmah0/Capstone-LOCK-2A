@@ -1,136 +1,166 @@
-from AIEngine import TrackingEngine
-from InterfaceHandler import Cv2UiHelperClass
-from GeoLocate import locate
+"""
+GCS Backend AI Processor: WebSocket-based detection and tracking.
+Uses TrackingEngine for code sharing - EXACT SAME approach as mouse_hover_refactored.py
+"""
+
 import os
 import time
+import numpy as np
+from collections import deque
+
 import AiStreamClient
+from AIEngine import TrackingEngine, ProcessingState, process_detection_mode, process_tracking_mode
+from GeoLocate import locate
 
 # Global Vars
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'models', 'yolo11n-seg.pt')
-VIDEO_PATH = os.path.join(BASE_DIR, 'video.mp4')
+MODEL_PATH = os.path.join(BASE_DIR, 'models', 'yolo11n.pt')
 
-def handle_stop_tracking(): #TODO
-    pass
+# Initialize engine 
+engine = TrackingEngine(MODEL_PATH)
 
-def handle_reselect_object(): #TODO
-    pass
+# Direct references to engine attributes for hot path access (bypasses property overhead)
+model = engine.model
 
+# Initialize processing state 
+state = ProcessingState()
 
-def main():
-    try:
-        frame_count = 0
+# Basic FPS tracking (minimal overhead)
+STATS_WINDOW = 100
+frame_times = deque(maxlen=STATS_WINDOW)
+last_fps_print = time.time()
 
-        # Init Video
-        if not AiStreamClient.init(VIDEO_PATH):
-            return
-
-        AiStreamClient.initialize()
-        engine = TrackingEngine(MODEL_PATH)
-
-        while True: 
-            # Waiting for video stream to start
-            frame = AiStreamClient.get_frame()
-            if frame is None:
-                time.sleep(0.01)
-                continue
-
-            frame_count += 1
-            output_frame = frame.copy()
-
-            # Check for pending commands from frontend
-            command = AiStreamClient.get_pending_command()
-            if command is not None:
-                if command == "stop_tracking":
-                    handle_stop_tracking()
-                elif command == "reselect_object":
-                    handle_reselect_object()
-
-            # --- STATE 1: TRACKING MODE ---
-            if engine.is_tracking:
-                success, bbox = engine.update(frame, frame_count)
-                if success:
-                    output_frame = Cv2UiHelperClass.draw_tracking_state(
-                        output_frame,
-                        bbox,
-                        engine.tracked_class,
-                        engine.status_message
-                    )
-
-
-                    # TODO: Get telemetry (will need to update with the embedded information we get from the video stream data) 
-                    current_alt = 10.0 
-                    current_lat = 50
-                    current_lon = 100
-                    heading = 0
-
-                     # --- Calculate Target Location ---
-                    image_center_x = frame.shape[1] / 2
-                    image_center_y = frame.shape[0] / 2
-
-                    bbox_center_x = bbox[0] + bbox[2]/2
-                    bbox_center_y = bbox[1] + bbox[3]/2
-
-                    obj_x_px = bbox_center_x - image_center_x
-                    obj_y_px = bbox_center_y - image_center_y
-
-                    target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
-                    
-                    # TODO: Update to send cmds to drone
-                    # print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
-                else:
-                    print("Tracking Lost")
-
-            # --- STATE 2: DETECTION MODE ---
-            else:
-                results = engine.detect_objects(frame)
-
-                if results.masks is not None:
-                    cursor_x, cursor_y = AiStreamClient.get_mouse_position()
-
-                    output_frame, hover_box, hover_index = Cv2UiHelperClass.draw_hover_effects(
-                        frame,
-                        results.masks.data,
-                        results.boxes.xyxy.cpu().numpy(),
-                        results.boxes.cls.cpu().numpy(),
-                        cursor_x,
-                        cursor_y,
-                    )
-
-                    # Check for frontend click to start tracking
-                    click = AiStreamClient.get_pending_click()
-                    if click is not None:
-                        click_x, click_y = click
-
-                        # Use the hover_box if click matches current hover position
-                        if hover_box is not None and abs(click_x - cursor_x) < 10 and abs(click_y - cursor_y) < 10:
-                            # User clicked on the hovered object
-                            class_id = int(results.boxes.cls[hover_index])
-                            engine.start_tracking(frame, hover_box, class_id)
-                        else:
-                            # Fallback: find which detection was clicked
-                            boxes = results.boxes.xyxy.cpu().numpy()
-                            classes = results.boxes.cls.cpu().numpy()
-
-                            for i, box in enumerate(boxes):
-                                x1, y1, x2, y2 = box.astype(int)
-
-                                # Check if click is inside this bounding box
-                                if x1 <= click_x <= x2 and y1 <= click_y <= y2:
-                                    # Convert xyxy to xywh
-                                    bbox = (x1, y1, x2 - x1, y2 - y1)
-                                    class_id = int(classes[i])
-                                    engine.start_tracking(frame, bbox, class_id)
-                                    break
-                                
-            AiStreamClient.push_frame(output_frame) # Always send frame to frontend
-            time.sleep(0.01) # Small delay to prevent CPU overload
+def print_fps():
+    """Print FPS statistics with detailed profiling breakdown for DETECTION mode"""
+    if len(frame_times) < 3:
+        return
     
-    except Exception as e:
-        print(f"\nERROR: Unexpected exception: {e}")
+    avg_frame_time = np.mean(frame_times)
+    fps = 1000.0 / avg_frame_time if avg_frame_time > 0 else 0
+    mode = "TRACKING" if state.tracking else "DETECTION"
+    
+    avg_get = np.mean(get_frame_times) if len(get_frame_times) > 0 else 0
+    avg_send = np.mean(send_frame_times) if len(send_frame_times) > 0 else 0
+    
+    print(f"\n[Frame {state.frame_count}] [{mode} MODE] FPS: {fps:.1f} (avg frame: {avg_frame_time:.2f}ms)")
+    
+    # WebSocket timing
+    print(f"  WebSocket I/O:")
+    print(f"    ├─ Get Frame:  {avg_get:.2f}ms")
+    print(f"    └─ Send Frame: {avg_send:.2f}ms")
+    
+    # Print detailed breakdown for DETECTION mode
+    if not state.tracking:
+        if state.detection_ran_this_frame:
+            print(f"  Input Profiling:")
+            print(f"    Frame: {state.profile_frame_shape} dtype={state.profile_frame_dtype} device={state.profile_frame_device}")
+            print(f"    Model Device: {state.profile_model_device}")
+            print(f"  Detection Profiling (detection ran this frame):")
+            print(f"    ├─ Model Inference:  {state.profile_inference_ms:.2f}ms")
+            print(f"    │  ├─ Frame Prep:      {state.profile_frame_prep_ms:.2f}ms")
+            print(f"    │  ├─ Model Predict:   {state.profile_model_predict_ms:.2f}ms (BOTTLENECK CHECK)")
+            print(f"    │  └─ Results Proc:    {state.profile_results_process_ms:.2f}ms")
+            print(f"    ├─ Extract Boxes:    {state.profile_boxes_ms:.2f}ms")
+            print(f"    └─ Drawing/Overlay:  {state.profile_drawing_ms:.2f}ms")
+            total_detection_time = state.profile_inference_ms + state.profile_boxes_ms + state.profile_drawing_ms
+            print(f"    Total Detection:     {total_detection_time:.2f}ms")
+        else:
+            print(f"  (Using cached detection from previous frame - no inference run)")
+    print()
 
-    finally:
-        AiStreamClient.shutdown()
+print("AI Processor started, waiting for frames...")
 
-if __name__ == "__main__":
-    main()
+try:
+    AiStreamClient.initialize()
+    
+    # Track WebSocket timing
+    get_frame_times = deque(maxlen=100)
+    send_frame_times = deque(maxlen=100)
+    
+    while True: 
+        frame_start_time = time.time()
+        
+        # Get frame
+        t_get_start = time.time()
+        frame = AiStreamClient.get_current_frame()
+        t_get_ms = (time.time() - t_get_start) * 1000
+        get_frame_times.append(t_get_ms)
+        
+        if frame is None:
+            time.sleep(0.01)
+            continue
+
+        state.increment_frame()
+        
+        # Get interaction inputs from frontend
+        cursor_pos = AiStreamClient.get_mouse_position()
+        click_pos = AiStreamClient.get_pending_click()
+        
+        cursor_x, cursor_y = cursor_pos if cursor_pos else (0, 0)
+        
+        # Check for frontend commands
+        command = AiStreamClient.get_pending_command()
+        if command is not None:
+            if command == "stop_tracking":
+                state.reset_tracking()
+                print("Stopped tracking, resuming detection")
+            elif command == "reselect_object":
+                state.reset_tracking()
+                print("Ready to select new object")
+
+        # --- DETECTION MODE or TRACKING MODE ---
+        if not state.tracking:
+            # --- DETECTION MODE ---
+            output_frame, _, mode_changed = process_detection_mode(
+                frame, model, state, (cursor_x, cursor_y), click_pos
+            )
+        else:
+            # --- TRACKING MODE ---
+            output_frame, tracking_succeeded, mode_changed = process_tracking_mode(frame, state)
+            
+            # Geolocation processing - only run every N frames to reduce computational load
+            if tracking_succeeded and state.frame_count % 5 == 0:
+                x, y, w, h = state.tracked_bbox
+                
+                # TODO: Get telemetry from frame metadata or flight computer
+                current_alt = 10.0 
+                current_lat = 50
+                current_lon = 100
+                heading = 0
+                
+                # --- Calculate Target Location ---
+                image_center_x = frame.shape[1] / 2
+                image_center_y = frame.shape[0] / 2
+                
+                bbox_center_x = x + w/2
+                bbox_center_y = y + h/2
+                
+                obj_x_px = bbox_center_x - image_center_x
+                obj_y_px = bbox_center_y - image_center_y
+                
+                target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
+                print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
+        
+        # Send frame to frontend
+        display_frame = output_frame if output_frame is not None else frame
+        t_send_start = time.time()
+        AiStreamClient.send_frame(display_frame)
+        t_send_ms = (time.time() - t_send_start) * 1000
+        send_frame_times.append(t_send_ms)
+        
+        # Track FPS
+        frame_time = (time.time() - frame_start_time) * 1000
+        frame_times.append(frame_time)
+        
+        # Print FPS every 2 seconds
+        if time.time() - last_fps_print > 2.0:
+            print_fps()
+            last_fps_print = time.time()
+
+except Exception as e:
+    print(f"\nERROR: Unexpected exception: {e}")
+    import traceback
+    traceback.print_exc()
+
+finally:
+    AiStreamClient.shutdown()
