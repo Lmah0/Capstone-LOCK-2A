@@ -9,6 +9,7 @@ import StraightenIcon from '@mui/icons-material/Straighten';
 import FlightIcon from '@mui/icons-material/Flight';
 import StopIcon from '@mui/icons-material/Stop';
 import { convertDistance } from '../../../utils/unitConversions';
+import { useWebSocket } from '@/providers/WebSocketProvider';
 import axios from 'axios';
 
 interface ControlsProps {
@@ -22,10 +23,10 @@ interface ControlsProps {
     setFollowDistance: React.Dispatch<React.SetStateAction<number>>;
     flightMode: string;
     setFlightMode: React.Dispatch<React.SetStateAction<string>>;
-    isFollowing?: boolean;
 }
 
-export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance, flightMode, setFlightMode, isFollowing = false }: ControlsProps) {
+export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance, flightMode, setFlightMode}: ControlsProps) {
+    const { trackingData } = useWebSocket();
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
@@ -111,25 +112,25 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     }}
                 >
                     <Box className="flex items-center mb-2">
-                        <StopIcon sx={{ color: isFollowing ? '#ef4444' : '#6b7280', mr: 1.5, fontSize: 20 }} />
+                        <StopIcon sx={{ color: trackingData?.tracking ? '#ef4444' : '#6b7280', mr: 1.5, fontSize: 20 }} />
                         <Typography variant="subtitle1" className="text-white font-semibold">
                             Stop Following
                         </Typography>
                     </Box>
                     <Typography variant="caption" className="text-neutral-300 mb-3 block">
-                        {isFollowing ? 'Stop following the current target' : 'No target being followed'}
+                        {trackingData?.tracking ? 'Stop following the current target' : 'No target being followed'}
                     </Typography>
                     <Button
                         id='stop-following-button'
                         variant="contained"
                         onClick={handleStopFollowing}
-                        disabled={!isFollowing}
+                        disabled={!trackingData?.tracking}
                         fullWidth
                         sx={{
-                            backgroundColor: isFollowing ? '#ef4444' : '#374151',
+                            backgroundColor: trackingData?.tracking ? '#ef4444' : '#374151',
                             color: 'white',
                             '&:hover': {
-                                backgroundColor: isFollowing ? '#dc2626' : '#374151',
+                                backgroundColor: trackingData?.tracking ? '#dc2626' : '#374151',
                             },
                             '&:disabled': {
                                 backgroundColor: '#374151',
@@ -137,7 +138,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                             },
                         }}
                     >
-                        {isFollowing ? 'Stop Following' : 'Not Following'}
+                        {trackingData?.tracking ? 'Stop Following' : 'Not Following'}
                     </Button>
                 </Paper>
 

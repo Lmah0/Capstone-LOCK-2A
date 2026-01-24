@@ -43,7 +43,8 @@ beforeEach(() => {
     droneConnection: true,
     telemetryData: null,
     isRecording: false,
-    batteryData: null
+    batteryData: null,
+    trackingData: { tracking: false, tracked_class: null }
   });
   axios.post.mockResolvedValue({ status: 200, data: {} });
   axios.get.mockResolvedValue({ status: 200, data: [] });
@@ -151,16 +152,17 @@ test('Pinned Telemetry in HUD Displays', () => {
 });
 
 test('Check Follow Distance', () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'disconnected', droneConnection: false, telemetryData: null});
+  useWebSocket.mockReturnValue({ 
+    connectionStatus: 'disconnected', 
+    droneConnection: false, 
+    telemetryData: null,
+    trackingData: { tracking: true, tracked_class: 'person' }
+  });
   render(<HUD {...mockProps} />);
   test_main_container();
 
-  const followDist = document.getElementById('follow-dist');
   const distToTarget = document.getElementById('dist-to-target');
-
-  expect(followDist).toBeInTheDocument();
   expect(distToTarget).toBeInTheDocument();
-  expect(followDist?.textContent).toContain('Follow: 10.00 m');
 });
 
 test('Check Flight Mode', () => {

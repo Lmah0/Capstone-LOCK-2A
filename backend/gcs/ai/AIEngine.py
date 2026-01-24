@@ -359,8 +359,6 @@ def process_tracking_mode(frame, state):
             
             # Draw outline
             cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 200, 200), 2)
-            cv2.putText(output_frame, f"Tracking class {state.tracked_class}", (x, y - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
             
             state.last_rendered_tracking_frame = output_frame
         else:

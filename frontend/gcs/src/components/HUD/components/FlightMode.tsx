@@ -2,6 +2,7 @@
 import { Paper, Typography, Box } from "@mui/material";
 import FlightIcon from '@mui/icons-material/Flight';
 import { formatUnits } from "../../../utils/unitConversions";
+import { useWebSocket } from "../../../providers/WebSocketProvider";
 
 interface FlightModeProps {
     isMetric: boolean;
@@ -11,7 +12,7 @@ interface FlightModeProps {
 
 export default function FlightMode({ isMetric, followDistance, flightMode }: FlightModeProps) {
     const distanceToTarget = 19.8;
-    const hasTrackedObject = true;
+    const { trackingData } = useWebSocket();
 
     return (
         <Paper
@@ -36,11 +37,16 @@ export default function FlightMode({ isMetric, followDistance, flightMode }: Fli
                 </Typography>
             </Box>
 
-            {hasTrackedObject ? (
+            {trackingData?.tracking ? (
                 <Box className="flex flex-col items-end gap-0.5">
-                    <Typography id='follow-dist' variant="caption" className="text-neutral-400 text-xs leading-none">
-                        Follow: {formatUnits.distance(followDistance, isMetric)}
-                    </Typography>
+                    <Box className="flex items-center gap-1.5">
+                        <Typography variant="caption" className="text-neutral-400 text-xs">
+                            Tracking:
+                        </Typography>
+                        <Typography variant="caption" className="font-semibold text-sm">
+                            {trackingData.tracked_class?.toUpperCase() || 'UNKNOWN'}
+                        </Typography>
+                    </Box>
                     <Box className="flex items-center gap-1">
                         <Typography id='dist-to-target' variant="body2" className="text-neutral-300">
                             Target: {formatUnits.distance(distanceToTarget, isMetric)}

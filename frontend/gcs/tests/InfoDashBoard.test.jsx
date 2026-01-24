@@ -22,6 +22,7 @@ beforeEach(() => {
     telemetryData: null,
     isRecording: false,
     batteryData: null,
+    trackingData: { tracking: false, tracked_class: null },
   });
   axios.post.mockResolvedValue({ status: 200, data: {} });
   axios.get.mockResolvedValue({ status: 200, data: [] });
@@ -87,7 +88,10 @@ test('Tabs Render and are Selectable', () => {
 });
 
 test('Telemetry Tab Displays Data', () => {
-  useWebSocket.mockReturnValue({ telemetryData: mock_telemetry });
+  useWebSocket.mockReturnValue({ 
+    telemetryData: mock_telemetry,
+    trackingData: { tracking: false, tracked_class: null }
+  });
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();
 
@@ -123,7 +127,10 @@ test('Telemetry Tab Displays Data', () => {
 });
 
 test('Test Unpinning Telemetry', () => {
-  useWebSocket.mockReturnValue({telemetryData: mock_telemetry});
+  useWebSocket.mockReturnValue({
+    telemetryData: mock_telemetry,
+    trackingData: { tracking: false, tracked_class: null }
+  });
   const propsWithPinned = {...mockProps, pinnedTelemetry: ['speed', 'altitude']};
   render(<InfoDashBoard {...propsWithPinned} />);
   test_main_container();
@@ -143,7 +150,10 @@ test('Test Unpinning Telemetry', () => {
 });
 
 test('Test Pinning Telemetry', () => {
-  useWebSocket.mockReturnValue({telemetryData: mock_telemetry});
+  useWebSocket.mockReturnValue({
+    telemetryData: mock_telemetry,
+    trackingData: { tracking: false, tracked_class: null }
+  });
   const propsUnpinned = {...mockProps, pinnedTelemetry: []};
   render(<InfoDashBoard {...propsUnpinned} />);
 
@@ -190,7 +200,11 @@ test('Controls Tab Displays Controls', () => {
 
 test('Toggle Recording', () => {
   const mockSetIsRecording = jest.fn();
-  useWebSocket.mockReturnValue({ isRecording: false, setIsRecording: mockSetIsRecording });
+  useWebSocket.mockReturnValue({ 
+    isRecording: false, 
+    setIsRecording: mockSetIsRecording,
+    trackingData: { tracking: false, tracked_class: null }
+  });
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();
 
