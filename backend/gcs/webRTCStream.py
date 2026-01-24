@@ -11,8 +11,6 @@ import time
 import os
 import cv2
 
-# source venv/bin/activate
-
 # Class obj used to match the return JSON from frontend
 # Offer/answer is the connection request - the video streaming begins when both sides agree
 class RTCOffer(BaseModel):
@@ -32,7 +30,6 @@ _app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # WebRTC Video Stream
 class AIVideoStreamTrack(VideoStreamTrack):
     """
@@ -40,8 +37,6 @@ class AIVideoStreamTrack(VideoStreamTrack):
         - Architecture: latest-frame (overwrite) buffer
         - Frames may be dropped & delivery of every frame is not guaranteed but this is low latency
     """
-    kind = "video"
-
     def __init__(self):
         super().__init__()
         self._start = None # Used internally by parent class of when streaming started
@@ -91,7 +86,6 @@ def push_frame(frame: np.ndarray):
     with _output_frame_lock:
         _output_frame = frame.copy()
 
-
 async def start_webrtc_server():
     """Start the WebRTC server as a background task"""
     try:
@@ -111,7 +105,6 @@ async def start_webrtc_server():
     except Exception as e:
         print(f"WebRTC server error: {e}")
         raise
-
 
 @_app.post("/offer")
 async def handle_offer(offer: RTCOffer):

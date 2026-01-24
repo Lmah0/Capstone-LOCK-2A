@@ -183,6 +183,7 @@ class ProcessingState:
         self.tracked_class = class_id
         self.tracked_bbox = bbox
         self.tracking = True
+        self.last_tracker_bbox = (True, bbox)
         print(f"Started tracking object, class {self.tracked_class}")
     
     def increment_frame(self):
@@ -337,14 +338,12 @@ def process_tracking_mode(frame, state):
     
     # Determine if we should update tracker this frame
     should_track = (state.frame_count % (TrackingConfig.TRACKER_FRAME_SKIP + 1)) == 0
-    
     if should_track:
         success, bbox = state.tracker.update(frame)
         state.last_tracker_bbox = (success, bbox)
     else:
         success, bbox = state.last_tracker_bbox if state.last_tracker_bbox else (False, None)
     
-    print(f"Tracking update: success={success}, bbox={bbox}")
     if success and bbox is not None:
         x, y, w, h = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         state.tracked_bbox = (x, y, w, h)
@@ -360,8 +359,6 @@ def process_tracking_mode(frame, state):
             
             # Draw outline
             cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 200, 200), 2)
-            cv2.putText(output_frame, f"Tracking class {state.tracked_class}", (x, y - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
             
             state.last_rendered_tracking_frame = output_frame
         else:

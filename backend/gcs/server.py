@@ -192,7 +192,12 @@ async def record(request: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
     
     try:
-        record_telemetry_data(data, classification=ENGINE.model.names[STATE.tracked_class])
+        # Get classification name if tracking, otherwise use "unknown"
+        classification = "unknown"
+        if STATE.tracked_class is not None:
+            classification = ENGINE.model.names[STATE.tracked_class]
+        
+        record_telemetry_data(data, classification=classification)
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
@@ -228,8 +233,7 @@ async def set_flight_mode(request: dict = Body(...)):
 async def stop_following():
     """Stop following the target"""
     try:
-        # TODO: Put AI back to detection mode
-        
+        STATE.reset_tracking()
         await send_to_flight_comp({"command": "stop_following"}) # sets back to loiter
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:

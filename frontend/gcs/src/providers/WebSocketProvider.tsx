@@ -126,7 +126,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);
           setTrackingData({ tracking: data.tracking, tracked_class: data.tracked_class })
-          
+
           // Reset drone connection timeout - if we don't receive data for 5 seconds, mark as disconnected
           if (droneTimeoutRef.current) {
             clearTimeout(droneTimeoutRef.current);
