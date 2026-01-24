@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import json
+from decimal import Decimal
+from datetime import datetime
 import websockets
 import traceback
 from contextlib import asynccontextmanager
@@ -23,9 +25,15 @@ VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'vid
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
+# recording variables
+is_recording = False
+recording_data = []
+recording_interval = 10 # every 10th heartbeat
+heartbeat_counter = 0
+
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
-    global flight_comp_ws
+    global flight_comp_ws, heartbeat_counter
     flight_comp_url = os.getenv('FLIGHT_COMP_URL')
     if not flight_comp_url:
         raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
@@ -69,7 +77,16 @@ async def video_streaming_task():
             cursor = CURSOR_HANDLER.cursor_pos
             click = CURSOR_HANDLER.click_pos
             
-            annotated_frame = await process_frame(frame, cursor, click)
+            annotated_frame, lat, lon = await process_frame(frame, cursor, click)
+            if STATE.tracking:
+                recording_data.append({
+                    'ts': datetime.now().isoformat() + 'Z',
+                    'latitude': Decimal(str(lat)) if lat is not None else Decimal('0'),
+                    'longitude': Decimal(str(lon)) if lon is not None else Decimal('0'),
+                    'altitude': Decimal('0'),
+                    'speed': Decimal('0'),
+                    'heading': Decimal('0'),
+                })
 
             if click is not None:
                 CURSOR_HANDLER.clear_click()
@@ -126,6 +143,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def append_record_data(data):
+    """Record tracked object data"""
+    if not data:
+        return
+
+    required_fields = ("timestamp", "latitude", "longitude")
+    # Check if all required fields are present in the single data point
+    missing = [f for f in required_fields if data.get(f) is None]
+    if missing:
+        return
+    
+    obj_position = {
+        'ts': datetime.fromtimestamp(data['timestamp']).isoformat() + 'Z',
+        'lat': Decimal(str(data.get('latitude', 0))),
+        'lon': Decimal(str(data.get('longitude', 0))),
+        'alt': Decimal(str(data.get('altitude', 0))),
+        'speed': Decimal(str(data.get('speed', 0))),
+        'heading': Decimal(str(data.get('heading', 0))),
+    }
+    recording_data.append(obj_position)
+
 # -- Websocket communication --
 async def send_data_to_connections(message: dict, websockets_list: List[WebSocket] = active_connections):
     """Send message to all connected WebSocket clients"""
@@ -172,31 +210,6 @@ def delete_object_endpoint(object_id: str):
     except Exception :
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
-@app.post("/record")
-async def record(request: dict = Body(...)):
-    """Record tracked object data"""
-    data = request.get("data")
-    if not data:
-        raise HTTPException(status_code=400, detail="Missing 'data'")
-
-    required_fields = ("timestamp", "latitude", "longitude")
-    # Validate point data
-    for idx, point in enumerate(data):
-        missing = [f for f in required_fields if point.get(f) is None]
-        if missing:
-            raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
-    
-    try:
-        # Get classification name if tracking, otherwise use "unknown"
-        classification = "unknown"
-        if STATE.tracked_class is not None:
-            classification = ENGINE.model.names[STATE.tracked_class]
-        
-        record_telemetry_data(data, classification=classification)
-        return {"status": 200, "message": "Data recorded successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
-
 # -- Database Endpoints --
 
 # -- Flight Computer Communication Endpoints --
@@ -229,9 +242,28 @@ async def stop_following():
     """Stop following the target"""
     try:
         await send_to_flight_comp({"command": "stop_following"})
+        classification = "unknown"
+        if STATE.tracked_class is not None:
+            classification = ENGINE.model.names[STATE.tracked_class]
+        
+        record_telemetry_data(recording_data, classification=classification)
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
+    
+
+@app.post("/recording")
+def toggle_recording():
+    """Toggle recording state"""
+    global is_recording
+    is_recording = not is_recording
+    if not is_recording and recording_data:
+        # Save recorded data when stopping
+        try:
+            record_telemetry_data(recording_data, classification='Unknown')
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save recording data: {str(e)}")
+    return {"is_recording": is_recording}
 
 # -- Flight Computer Communication Endpoints --
 

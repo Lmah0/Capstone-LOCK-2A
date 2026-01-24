@@ -123,7 +123,7 @@ async def process_frame(frame, cursor_pos=None, click_pos=None):
             # print_fps()
             last_fps_print = time.time()
         
-        return display_frame
+        return display_frame, target_lat, target_lon
 
     except Exception as e:
         print(f"\nERROR processing frame: {e}")
