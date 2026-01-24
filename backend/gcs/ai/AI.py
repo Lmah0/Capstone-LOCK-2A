@@ -11,8 +11,6 @@ from .AIEngine import TrackingEngine, ProcessingState, CursorHandler, process_de
 from GeoLocate import locate
 
 # Global Vars
-AI_CMDS_LIST = ["click", "mouse_move"]
-
 ENGINE = TrackingEngine()
 STATE = ProcessingState()
 CURSOR_HANDLER = CursorHandler()

@@ -183,6 +183,7 @@ class ProcessingState:
         self.tracked_class = class_id
         self.tracked_bbox = bbox
         self.tracking = True
+        self.last_tracker_bbox = (True, bbox)
         print(f"Started tracking object, class {self.tracked_class}")
     
     def increment_frame(self):
@@ -337,14 +338,12 @@ def process_tracking_mode(frame, state):
     
     # Determine if we should update tracker this frame
     should_track = (state.frame_count % (TrackingConfig.TRACKER_FRAME_SKIP + 1)) == 0
-    
     if should_track:
         success, bbox = state.tracker.update(frame)
         state.last_tracker_bbox = (success, bbox)
     else:
         success, bbox = state.last_tracker_bbox if state.last_tracker_bbox else (False, None)
     
-    print(f"Tracking update: success={success}, bbox={bbox}")
     if success and bbox is not None:
         x, y, w, h = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         state.tracked_bbox = (x, y, w, h)
