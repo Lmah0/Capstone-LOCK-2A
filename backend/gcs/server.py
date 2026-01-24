@@ -187,7 +187,12 @@ async def record(request: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
     
     try:
-        record_telemetry_data(data, classification=ENGINE.model.names[STATE.tracked_class])
+        # Get classification name if tracking, otherwise use "unknown"
+        classification = "unknown"
+        if STATE.tracked_class is not None:
+            classification = ENGINE.model.names[STATE.tracked_class]
+        
+        record_telemetry_data(data, classification=classification)
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
