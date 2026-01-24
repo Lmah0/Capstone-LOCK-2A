@@ -6,15 +6,13 @@ import asyncio
 import json
 import websockets
 import traceback
-import base64
-import numpy as np
 from contextlib import asynccontextmanager
 from typing import List
 import os
 import cv2
 import time
 from database import get_all_objects, delete_object, record_telemetry_data
-from ai.AI import ENGINE, STATE, CURSOR_HANDLER, AI_CMDS_LIST, process_frame
+from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
 import webRTCStream
 from dotenv import load_dotenv
 
