@@ -13,7 +13,7 @@ import datetime
 from mavlinkMessages.connect import connect_to_vehicle
 from mavlinkMessages.commandToLocation import move_to_location
 
-load_dotenv(dotenv_path="../../.env")
+load_dotenv(dotenv_path="../../../.env")
 
 active_connections: List[WebSocket] = []
 

@@ -1,136 +1,105 @@
 """
-AiStream - Client library for AI processor to communicate with GCS server.
+AiStream - I/O layer for AI processor
 
-WEBSOCKET CONNECTIONS MANAGED:
-    1. /ws/camera-source:       Receives camera frames from server
-    2. /ws/ai-commands:         Receives frontend commands (clicks, mouse moves)
-    3. /ws/ai-frame-reader:     Sends processed frames back to server
+Handles:
+    1. Video Input: cv2 capture from file
+    2. Video Output: WebRTC streaming via aiortc (H.264)
+    3. Commands: WebSocket connection for frontend commands (clicks, mouse)
 """
 
 import asyncio
 import websockets
-import base64
 import cv2
 import os
 import threading
 import time
 import json
 import numpy as np
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from av import VideoFrame
 from dotenv import load_dotenv
+
 
 load_dotenv(dotenv_path="../../.env")
 
-# WebSocket URLs
+_app = FastAPI()
+_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Class obj used to match the return JSON from frontend
+# Offer/answer is the connection request - the video streaming begins when both sides agree
+class RTCOffer(BaseModel):
+    sdp: str #Text format that describes media session
+    type: str # "offer" (from frontend) or "answer" (from backend)
+
+# URLs
 BACKEND_PORT = os.getenv('GCS_BACKEND_PORT')
-CAMERA_WS_URL = f"ws://localhost:{BACKEND_PORT}/ws/camera-source"
-COMMAND_WS_URL = f"ws://localhost:{BACKEND_PORT}/ws/ai-commands"
-FRAME_SENDER_WS_URL = f"ws://localhost:{BACKEND_PORT}/ws/ai-frame-reader"
+BACKEND_HOST = os.getenv('BACKEND_GCS_HOST', 'localhost')  # 'backend-gcs' in Docker, 'localhost' locally
+WEBRTC_PORT = int(os.getenv("WEBRTC_PORT", 8767))
+COMMAND_WS_URL = f"ws://{BACKEND_HOST}:{BACKEND_PORT}/ws/ai-commands"
 
-# Global state
-_loop = None # async event loop controller, manages the websocket sending
-_loop_thread = None # OS thread process controller, prevents the cv2 loop from being blocked by the websocket I/O
-_camera_ws = None
+# Global state 
+_main_loop = None
+_main_thread = None
+_processing_state = None  # Reference to ProcessingState from main.py
+
+# Video Input (CV2)
+_video_capture = None
+_video_lock = threading.Lock()
+
+# WebRTC Video
+_peer_connections = set()
+_output_frame = None
+_output_frame_lock = threading.Lock()
+_server = None
+
+# Websocket AI Commands
 _command_ws = None
-_frame_sender_ws = None
-
-_current_frame = None # Latest frame from camera
-_frame_lock = threading.Lock() 
-
-_pending_click = None # Store click coordinates
-_pending_command = None # Queued commands
-_mouse_position = (0, 0) # Current mouse position
+_pending_click = None
+_pending_command = None
+_mouse_position = (0, 0)
 _command_lock = threading.Lock()
 
 # EVENT LOOP MANAGEMENT
 def _start_event_loop():
     """Start the asyncio event loop in a background thread"""
-    global _loop
-    _loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(_loop)
-    _loop.run_forever()
+    global _main_loop
+    _main_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_main_loop)
+
+    # Start both WebRTC server and command handler
+    _main_loop.create_task(start_webrtc_server())
+    _main_loop.create_task(receive_frontend_commands())
+
+    _main_loop.run_forever()
 
 def initialize():
-    """Init. Establishes all WebSocket connections."""
-    global _loop, _loop_thread
+    """Init. Establishes AI Command WebSocket connection and WebRTC server"""
+    global _main_thread
 
-    if _loop_thread is not None:
+    if _main_thread is not None:
         print("AiStreamClient already initialized")
         return
 
-    print("Initializing AiStreamClient...")
-
+    print("Initializing command Websocket and WebRTC video stream")
     # Start event loop in background thread
-    _loop_thread = threading.Thread(target=_start_event_loop, daemon=True)
-    _loop_thread.start()
+    _main_thread = threading.Thread(target=_start_event_loop, daemon=True)
+    _main_thread.start()
 
     # Wait for loop to start
     time.sleep(0.1)
 
-    # Connect all WebSocket endpoints
-    future = asyncio.run_coroutine_threadsafe(_connect_all(), _loop)
-    try:
-        future.result(timeout=10)
-        print("AiStreamClient initialized successfully")
-    except Exception as e:
-        print(f"Failed to initialize AiStreamClient: {e}")
-
-async def _connect_all():
-    """Connect to all WebSocket endpoints as background tasks"""
-
-    asyncio.create_task(_connect_frame_sender())
-    asyncio.create_task(_receive_camera_frames())
-    asyncio.create_task(_receive_frontend_commands())
-
-# CAMERA FRAME RECEIVER
-async def _receive_camera_frames():
-    """Connect to camera source and continuously receive frames"""
-    global _camera_ws, _current_frame, _frame_lock
-
-    max_retries = 3
-    retry_count = 0
-
-    while retry_count < max_retries:
-        try:
-            print(f"Connecting to camera source at {CAMERA_WS_URL}...")
-            async with websockets.connect(CAMERA_WS_URL) as ws:
-                _camera_ws = ws
-                print("Successfully connected to camera source")
-                retry_count = 0
-
-                async for message in ws:
-                    try:
-                        jpeg_bytes = base64.b64decode(message)
-                        nparr = np.frombuffer(jpeg_bytes, np.uint8)
-                        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-                        if frame is not None:
-                            with _frame_lock:
-                                _current_frame = frame
-                    except Exception as e:
-                        print(f"Error decoding frame: {e}")
-                        continue
-
-        except ConnectionRefusedError:
-            retry_count += 1
-            print(f"Camera source connection refused (attempt {retry_count}/{max_retries}). Retrying in 3s...")
-            await asyncio.sleep(3)
-        except Exception as e:
-            retry_count += 1
-            print(f"Camera source error (attempt {retry_count}/{max_retries}): {e}. Retrying in 3s...")
-            await asyncio.sleep(3)
-
-    print("Failed to connect to camera source after maximum retries")
-    _camera_ws = None
-
-def get_current_frame():
-    """Get the latest frame from the camera source."""
-    with _frame_lock:
-        if _current_frame is None:
-            return None
-        return _current_frame.copy()
-
 # COMMAND RECEIVER
-async def _receive_frontend_commands():
+async def receive_frontend_commands():
     """Connect to command channel and receive frontend commands"""
     global _command_ws, _pending_click, _pending_command, _mouse_position, _command_lock
 
@@ -171,7 +140,7 @@ async def _receive_frontend_commands():
                             print(f"Received command: {command_type}")
 
                     except json.JSONDecodeError as e:
-                        print(f"Error decoding command: {e}")
+                        # Silently skip malformed messages
                         continue
                     except Exception as e:
                         print(f"Error processing command: {e}")
@@ -219,92 +188,178 @@ def get_mouse_position():
     with _command_lock:
         return _mouse_position
 
-# FRAME SENDER
-async def _connect_frame_sender():
-    """Establish persistent connection to send frames to server"""
-    global _frame_sender_ws
-    max_retries = 3
-    retry_count = 0
+# WebRTC Video Stream
+class AIVideoStreamTrack(VideoStreamTrack):
+    """
+        - Custom video track that streams AI-processed frames via WebRTC.
+        - Architecture: latest-frame (overwrite) buffer
+        - Frames may be dropped & delivery of every frame is not guaranteed but this is low latency
+    """
+    kind = "video"
 
-    while retry_count < max_retries:
+    def __init__(self):
+        super().__init__()
+        self._start = None # Used internally by parent class of when streaming started
+
+    async def recv(self):
+        """Give WebRTC the next frame to send."""
         try:
-            print(f"Connecting to frame sender at {FRAME_SENDER_WS_URL}...")
-            async with websockets.connect(FRAME_SENDER_WS_URL) as ws:
-                _frame_sender_ws = ws
-                print("Successfully connected to frame sender")
-                retry_count = 0  # Reset retry count on successful connection
+            if self._start is None:
+                self._start = time.time()
 
-                # Keep connection alive by listening for messages (server may send keepalives or close signals)
-                try:
-                    async for message in ws:
-                        # Server doesn't send data on this channel, but this keeps connection alive
-                        pass
-                except websockets.ConnectionClosed:
-                    print("Frame sender connection closed by server")
-                    _frame_sender_ws = None
+            # Pts = presentation timestamp which is the frame number
+            pts, time_base = await self.next_timestamp()
 
-        except ConnectionRefusedError:
-            retry_count += 1
-            print(f"Frame sender connection refused (attempt {retry_count}/{max_retries}). Retrying in 3s...")
-            await asyncio.sleep(3)
-        except websockets.ConnectionClosed:
-            print("Frame sender connection closed, reconnecting...")
-            _frame_sender_ws = None
-            await asyncio.sleep(1)
+            frame = get_latest_ai_frame_for_stream()
+
+            if frame is None: # If no frame is avaliable send a black screen
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+            # Convert BGR (OpenCV format) to RGB (WebRTC format)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # Wrap numpy array in a VideoFrame object for aiortc
+            video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
+            
+            # Attach timing info so parent client (VideoStreamTrack) knows when to display this frame
+            video_frame.pts = pts
+            video_frame.time_base = time_base
+
+            return video_frame
+
         except Exception as e:
-            retry_count += 1
-            print(f"Frame sender error (attempt {retry_count}/{max_retries}): {e}. Retrying in 3s...")
-            await asyncio.sleep(3)
+            print(f"WebRTC recv ERROR: {e}")
+            raise
 
-    print("Failed to connect frame sender after maximum retries")
-    _frame_sender_ws = None
+def get_latest_ai_frame_for_stream():
+    """Get the latest output frame that user pushed to stream"""
+    global _output_frame
+    with _output_frame_lock:
+        if _output_frame is None:
+            return None
+        return _output_frame.copy()
 
-async def _send_frame_async(frame):
-    """Async function to encode and send frame"""
-    global _frame_sender_ws
+def push_frame(frame: np.ndarray):
+    """Push a processed frame to be streamed via WebRTC"""
+    global _output_frame
+    with _output_frame_lock:
+        _output_frame = frame.copy()
 
-    if _frame_sender_ws is None:
-        print("Cannot send frame: No connection to server")
-        return
+@_app.get("/tracked-class")
+async def get_tracked_class():
+    """Return the current tracked class from the AI processor"""
+    if _processing_state is None:
+        return {"tracked_class": None, "is_tracking": False}
+    return {
+        "tracked_class": _processing_state.tracked_class if _processing_state.tracking else None,
+        "is_tracking": _processing_state.tracking
+    }
 
-    try:
-        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
-        if not success:
-            print("Failed to encode frame as JPEG")
-            return
+@_app.post("/offer")
+async def handle_offer(offer: RTCOffer):
+    """Endpoint that handles WebRTC offer from frontend and return answer"""
+    rtc_offer = RTCSessionDescription(sdp=offer.sdp, type=offer.type)
 
-        base64_string = base64.b64encode(buffer.tobytes()).decode('utf-8')
+    pc = RTCPeerConnection()
+    _peer_connections.add(pc)
 
-        await _frame_sender_ws.send(base64_string)
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        state = pc.connectionState
+        if state in ("connected", "failed", "closed"):
+            print(f"WebRTC connection state: {state}")
+        if state == "failed" or state == "closed":
+            await pc.close()
+            _peer_connections.discard(pc)
 
-    except websockets.ConnectionClosed:
-        print("Frame sender connection closed. Will reconnect...")
-        _frame_sender_ws = None
-    except Exception as e:
-        print(f"Error sending frame: {e}")
+    video_track = AIVideoStreamTrack()
+    pc.addTrack(video_track)
 
-def send_frame(frame):
-    """Send the AI processed frame to the frontend."""
-    global _loop
+    # Process the offer from frontend and create an answer
+    await pc.setRemoteDescription(rtc_offer)
+    answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
 
-    if _loop is None:
-        print("Event loop not initialized!")
-        return
+    # Frontend will use this to complete the connection
+    return {
+        "sdp": pc.localDescription.sdp,
+        "type": pc.localDescription.type
+    }
 
-    try:
-        future = asyncio.run_coroutine_threadsafe(_send_frame_async(frame), _loop)
-        future.result(timeout=0.1)
-    except asyncio.TimeoutError:
-        print("Frame send timeout - server may be slow")
-    except Exception as e:
-        print(f"Error sending frame: {e}")
+async def start_webrtc_server():
+    """Start the WebRTC signaling server using uvicorn."""
+    global _server
+
+    config = uvicorn.Config(
+        _app,
+        host="0.0.0.0",
+        port=int(WEBRTC_PORT),
+        log_level="warning"
+    )
+    _server = uvicorn.Server(config)
+    print(f"WebRTC server started on port {WEBRTC_PORT}")
+    await _server.serve()
+
+
+async def stop_webrtc_server():
+    """Stop the WebRTC signaling server."""
+    global _server
+    if _server:
+        _server.should_exit = True
+
+# Video Input (Mocked video stream)
+def initialize_video(video_path: str = None) -> bool:
+    """Initialize mocked video"""
+    global _video_capture
+
+    _video_capture = cv2.VideoCapture(video_path)
+
+    if not _video_capture.isOpened():
+        print(f"Error: Could not open video file at {video_path}")
+        return False
+
+    print(f"Video capture initialized: {video_path}")
+    return True
+
+def set_processing_state(state):
+    """Set the processing state reference from main.py"""
+    global _processing_state
+    _processing_state = state
+
+def get_video_frame():
+    """ Get the next frame from the video capture. Automatically loops when video ends."""
+    global _video_capture
+
+    if _video_capture is None:
+        return None
+
+    with _video_lock:
+        ret, frame = _video_capture.read()
+
+        if not ret: # Loop the video if we've reached the end
+            _video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ret, frame = _video_capture.read()
+            if not ret:
+                return None
+
+        return frame.copy()
+
+def release_video():
+    """Release the video capture resource."""
+    global _video_capture
+    if _video_capture is not None:
+        _video_capture.release()
+        _video_capture = None
 
 # CLEANUP
 def shutdown():
     """Clean shutdown of all connections and event loop"""
-    global _loop
+    global _main_loop
 
-    if _loop is not None:
-        _loop.call_soon_threadsafe(_loop.stop)
+    release_video()
 
-    print(f"AiStreamClient shutdown complete. PORT {BACKEND_PORT}")
+    if _main_loop is not None:
+        asyncio.run_coroutine_threadsafe(stop_webrtc_server(), _main_loop)
+        _main_loop.call_soon_threadsafe(_main_loop.stop)
+
+    print("AiStreamClient shutdown complete")

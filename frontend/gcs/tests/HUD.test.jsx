@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import HUD from '../src/components/HUD/HUD';
 import { useWebSocket } from '../src/providers/WebSocketProvider';
@@ -14,6 +14,21 @@ jest.mock('../src/providers/WebSocketProvider', () => ({
 
 // Mock console errors for now to reduce noise during tests
 console.error = jest.fn();
+
+// Mock RTCPeerConnection for WebRTC tests
+global.RTCPeerConnection = jest.fn(() => ({
+  createOffer: jest.fn().mockResolvedValue({ sdp: 'mock-offer', type: 'offer' }),
+  setLocalDescription: jest.fn().mockResolvedValue(undefined),
+  setRemoteDescription: jest.fn().mockResolvedValue(undefined),
+  addTransceiver: jest.fn().mockReturnValue({}),
+  close: jest.fn(),
+  onconnectionstatechange: null,
+  ontrack: null,
+  iceGatheringState: 'complete',
+  addEventListener: jest.fn(),
+  removeEventListener: jest.fn(),
+  connectionState: 'connected'
+}));
 
 // Clean up after each test
 afterEach(() => {
@@ -58,15 +73,17 @@ const test_main_container = () => {
   expect(container).toBeInTheDocument();
 }
 
-test('Disconnected Drone, Disconnected Server', () => {
+test('Disconnected Drone, Disconnected Server', async () => {
   useWebSocket.mockReturnValue({ connectionStatus: 'disconnected', droneConnection: false, telemetryData: null});
   render(<HUD {...mockProps} />);
 
   test_main_container();
 
-  // Test that the component renders key HUD elements
-  expect(screen.getByText('Loading telemetry...')).toBeInTheDocument();
-  expect(screen.getByText('Disconnected')).toBeInTheDocument();
+  // Wait for the component to settle and show disconnected state (attempts to connect before showing disconnected)
+  await waitFor(() => {
+    expect(screen.getByText('Loading telemetry...')).toBeInTheDocument();
+    expect(screen.getAllByText('Disconnected').length).toBeGreaterThan(0);
+  }, { timeout: 2000 });
 
   // Test for ErrorIcon existence - drone is disconnected so error should be present
   expect(document.getElementById('drone-disconnected')).toBeInTheDocument();
@@ -246,4 +263,33 @@ test('Battery Gauge Display', () => {
       textColor: 'white'
     })
   );
+});
+
+test('Video Feed Shows Stream Without Errors', async () => {
+  useWebSocket.mockReturnValue({ connectionStatus: 'connected', droneConnection: true, telemetryData: null});
+  render(<HUD {...mockProps} />);
+  
+  const videoFeed = document.getElementById('video-feed');
+  expect(videoFeed).toBeInTheDocument();
+  
+  // Check that the video feed container exists
+  const videoContainer = videoFeed.querySelector('.relative.w-full.h-full');
+  expect(videoContainer).toBeInTheDocument();
+  
+  // Check that error is not displayed when connected
+  expect(screen.queryByText(/Failed to connect to video stream/i)).not.toBeInTheDocument();
+});
+
+test('Video Feed Shows Error When Stream Fails', async () => {
+  useWebSocket.mockReturnValue({ connectionStatus: 'failed', droneConnection: false, telemetryData: null});
+  render(<HUD {...mockProps} />);
+  
+  const videoFeed = document.getElementById('video-feed');
+  expect(videoFeed).toBeInTheDocument();
+
+  // Wait for error state to update
+  await waitFor(() => {
+    // Check that error message is displayed
+    expect(screen.getByText(/Failed to connect to video stream/i)).toBeInTheDocument();
+  });
 });

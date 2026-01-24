@@ -1,19 +1,17 @@
 """ Main server for Ground Control Station (GCS) backend. """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 import uvicorn
 import asyncio
 import json
 import websockets
+import aiohttp
 from contextlib import asynccontextmanager
 from typing import List
 import os
 from database import get_all_objects, delete_object, record_telemetry_data
 from dotenv import load_dotenv
 import queue
-import base64
-import cv2
 from decimal import Decimal
 from datetime import datetime
 
@@ -153,6 +151,38 @@ def delete_object_endpoint(object_id: str):
     except Exception :
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
+@app.post("/record")
+async def record(request: dict = Body(...)):
+    """Record tracked object data"""
+    data = request.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data'")
+
+    required_fields = ("timestamp", "latitude", "longitude")
+    # Validate point data
+    for idx, point in enumerate(data):
+        missing = [f for f in required_fields if point.get(f) is None]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
+    
+    # Fetch current tracked class from AI processor
+    tracked_class = "Unknown"
+    try:
+        ai_processor_url = f"http://localhost:{os.getenv('WEBRTC_PORT', 8767)}/tracked-class"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(ai_processor_url) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    tracked_class = result.get("tracked_class") or "Unknown"
+    except Exception as e:
+        print(f"Failed to fetch tracked class: {e}")
+    
+    try:
+        record_telemetry_data(data, classification=tracked_class)
+        return {"status": 200, "message": "Data recorded successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
+
 # -- Database Endpoints --
 
 # -- Flight Computer Communication Endpoints --
@@ -216,7 +246,7 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = json.loads(message)
                 command_type = data.get("type")
-
+                
                 # Relay AI-related commands to the AI processor
                 if command_type in AI_CMDS_LIST:
                     await send_data_to_connections(data, ai_command_connections)
@@ -236,7 +266,6 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
 
-# -- AI Integration Sockets --
 @app.websocket("/ws/ai-commands")
 async def websocket_ai_commands_endpoint(websocket: WebSocket):
     """WebSocket endpoint for AI processor to receive frontend commands (clicks, stop, etc.)"""
@@ -253,116 +282,6 @@ async def websocket_ai_commands_endpoint(websocket: WebSocket):
     finally:
         if websocket in ai_command_connections:
             ai_command_connections.remove(websocket)
-            
-@app.websocket("/ws/ai-frame-reader")
-async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
-    """ Internal WebSocket endpoint to receive JPEG-encoded frames from the Detector Algorithm """
-    await websocket.accept()
-    print("AI Frame Producer Connected.")
-    try:
-        # Expecting raw bytes (base64 encoded JPEG buffer)
-        while True:
-            # Receive base64 string from the AI process
-            base64_frame_data = await websocket.receive_text()
-            
-            # Decode the base64 string back into raw JPEG bytes
-            jpeg_bytes = base64.b64decode(base64_frame_data)
-            
-            # Put the new frame into the queue for the MJPEG streamer
-            try:
-                # Clear old frames to ensure minimum latency
-                while not video_frame_queue.empty():
-                    video_frame_queue.get_nowait()
-                    
-                video_frame_queue.put(jpeg_bytes, block=False)
-            except queue.Full:
-                # If queue is full, just drop the frame to prioritize newer ones (low latency)
-                pass 
-            
-    except WebSocketDisconnect:
-        print("AI Frame Producer disconnected.")
-    except Exception as e:
-        print(f"Error in /ws/ai_frame: {e}")
-    finally:
-        pass
-
-@app.websocket("/ws/camera-source")
-async def websocket_camera_source_endpoint(websocket: WebSocket):
-    """Mock camera stream - reads video file and streams frames to AI processor"""
-    await websocket.accept()
-    print("AI Processor connected to camera source")
-    # Video file path - this mocks the camera feed
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    VIDEO_PATH = os.path.join(BASE_DIR, "ai_processor", "video.mp4")
-    cap = cv2.VideoCapture(VIDEO_PATH)
-
-    if not cap.isOpened():
-        print(f"Error: Could not open video file at {VIDEO_PATH}")
-        await websocket.close()
-        return
-
-    try:
-        while True:
-            ret, frame = cap.read()
-
-            # Loop video when it ends
-            if not ret:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
-            # Encode frame as JPEG
-            success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            if not success:
-                continue
-
-            # Send as base64 string
-            base64_frame = base64.b64encode(buffer.tobytes()).decode('utf-8')
-            await websocket.send_text(base64_frame)
-
-            # Control frame rate (~30 fps)
-            await asyncio.sleep(1/30)
-
-    except WebSocketDisconnect:
-        print("AI Processor disconnected from camera source")
-    except Exception as e:
-        print(f"Error in camera source: {e}")
-    finally:
-        cap.release()
-
-async def generate_video_frames():
-    """Reads JPEG frames from the queue and formats them for MJPEG streaming."""
-    frame_boundary = b'--frame\r\n'
-    content_type = b'Content-Type: image/jpeg\r\n\r\n'
-
-    while True:
-        try:
-            # 1. Wait for a new frame
-            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=1)
-
-            # 2. Yield the MJPEG format
-            yield frame_boundary
-            yield content_type
-            yield jpeg_frame
-            yield b'\r\n'
-
-        except queue.Empty:
-            # If the queue is empty after the timeout, wait briefly and loop again
-            await asyncio.sleep(0.01)
-
-        except Exception as e:
-            print(f"Error yielding frame: {e}")
-            break
-
-@app.get("/video_feed")
-async def video_feed():
-    """Stream video frames via MJPEG"""
-    media_type = 'multipart/x-mixed-replace; boundary=frame'
-    return StreamingResponse(
-        generate_video_frames(),
-        media_type=media_type 
-    )
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
