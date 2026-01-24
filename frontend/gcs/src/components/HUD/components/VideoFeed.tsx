@@ -220,28 +220,6 @@ export default function VideoFeed() {
         setIsTracking(true);
     }, []);
 
-    // Stop tracking
-    const handleStopTracking = () => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-        wsRef.current.send(JSON.stringify({
-            type: 'stop_tracking'
-        }));
-
-        setIsTracking(false);
-    };
-
-    // Reselect object
-    const handleReselectObject = () => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-        wsRef.current.send(JSON.stringify({
-            type: 'reselect_object'
-        }));
-
-        setIsTracking(false);
-    };
-
     return (
         <div className="w-full h-full relative bg-gray-900">
             <div ref={containerRef} className="relative w-full h-full bg-gray-800 overflow-hidden">
