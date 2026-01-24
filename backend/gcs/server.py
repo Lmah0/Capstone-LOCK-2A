@@ -40,6 +40,11 @@ async def flight_computer_background_task():
                 async for message in ws:
                     try:
                         data = json.loads(message)
+                        data["tracking"] = STATE.tracking # Add tracking state
+                        if STATE.tracked_class is not None and ENGINE.model is not None:
+                            data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
+                        else:
+                            data["tracked_class"] = None
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
                         continue
@@ -225,7 +230,9 @@ async def set_flight_mode(request: dict = Body(...)):
 async def stop_following():
     """Stop following the target"""
     try:
-        await send_to_flight_comp({"command": "stop_following"})
+        # TODO: Put AI back to detection mode
+        
+        await send_to_flight_comp({"command": "stop_following"}) # sets back to loiter
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
@@ -248,7 +255,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     CURSOR_HANDLER.update_cursor(data.get("x"), data.get("y"))
                 elif command_type == "click":
                     CURSOR_HANDLER.register_click(data.get("x"), data.get("y"))
-                    # Handle click in AI processor
                     print(f"Registered click at ({data.get('x')}, {data.get('y')})")
 
             except json.JSONDecodeError:
