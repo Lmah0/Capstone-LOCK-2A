@@ -5,20 +5,25 @@ import uvicorn
 import asyncio
 import json
 import websockets
-import aiohttp
+import traceback
+import base64
+import numpy as np
 from contextlib import asynccontextmanager
 from typing import List
 import os
+import cv2
+import time
 from database import get_all_objects, delete_object, record_telemetry_data
+from ai.AI import ENGINE, STATE, CURSOR_HANDLER, AI_CMDS_LIST, process_frame
+import webRTCStream
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path="../../.env")
 
-AI_CMDS_LIST = ["click", "stop_tracking", "reselect_object", "mouse_move"]
+VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'video.mp4')
 
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
-ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -44,19 +49,76 @@ async def flight_computer_background_task():
             flight_comp_ws = None
             await asyncio.sleep(5)
 
+async def video_streaming_task():
+    """Background task that reads video, processes through AI, and streams via WebRTC"""
+    cap = cv2.VideoCapture(VIDEO_PATH)
+    if not cap.isOpened():
+        print(f"ERROR: Could not open video file: {VIDEO_PATH}")
+        return
+    
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    frame_delay = 1.0 / fps
+    try:
+        while True:
+            frame_start = time.time()
+            ret, frame = cap.read()    
+            if not ret:
+                # Loop video
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+            
+            # Process frame through AI
+            cursor = CURSOR_HANDLER.cursor_pos
+            click = CURSOR_HANDLER.click_pos
+            
+            annotated_frame = await process_frame(frame, cursor, click)
+
+            if click is not None:
+                CURSOR_HANDLER.clear_click()
+                print("Click cleared")
+        
+            # Send to WebRTC stream
+            if annotated_frame is not None:
+                webRTCStream.push_frame(annotated_frame)
+            
+            # Maintain video FPS
+            elapsed = time.time() - frame_start
+            sleep_time = max(0, frame_delay - elapsed)
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            
+    except asyncio.CancelledError:
+        print("Video streaming task cancelled")
+        raise
+    except Exception as e:
+        print(f"Video streaming error: {e}")
+        traceback.print_exc()
+    finally:
+        cap.release()
+        print("Video capture released")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if (True): # change to false if just testing ai stuff w/o flight computer
-        task = asyncio.create_task(flight_computer_background_task())
-        yield
-        # Shutdown
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-    else:
-        yield
+    # Start background tasks
+    flight_comp_task = asyncio.create_task(flight_computer_background_task())
+    webrtc_task = asyncio.create_task(webRTCStream.start_webrtc_server())
+    video_task = asyncio.create_task(video_streaming_task())
+    
+    yield
+    
+    # Shutdown
+    flight_comp_task.cancel()
+    webrtc_task.cancel()
+    video_task.cancel()
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(flight_comp_task, webrtc_task, video_task, return_exceptions=True), timeout=2.0
+        )
+    except asyncio.TimeoutError:
+        print("Warning: Some tasks did not shut down cleanly")
+    except asyncio.CancelledError:
+        pass
+
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
@@ -126,20 +188,8 @@ async def record(request: dict = Body(...)):
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
     
-    # Fetch current tracked class from AI processor
-    tracked_class = "Unknown"
     try:
-        ai_processor_url = f"http://localhost:{os.getenv('WEBRTC_PORT', 8767)}/tracked-class"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(ai_processor_url) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    tracked_class = result.get("tracked_class") or "Unknown"
-    except Exception as e:
-        print(f"Failed to fetch tracked class: {e}")
-    
-    try:
-        record_telemetry_data(data, classification=tracked_class)
+        record_telemetry_data(data, classification=ENGINE.model.names[STATE.tracked_class])
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
@@ -193,10 +243,13 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = json.loads(message)
                 command_type = data.get("type")
-                
-                # Relay AI-related commands to the AI processor
-                if command_type in AI_CMDS_LIST:
-                    await send_data_to_connections(data, ai_command_connections)
+                # Handle mouse movements and clicks for AI
+                if command_type == "mouse_move":
+                    CURSOR_HANDLER.update_cursor(data.get("x"), data.get("y"))
+                elif command_type == "click":
+                    CURSOR_HANDLER.register_click(data.get("x"), data.get("y"))
+                    # Handle click in AI processor
+                    print(f"Registered click at ({data.get('x')}, {data.get('y')})")
 
             except json.JSONDecodeError:
                 pass  # Just keep connection alive if not valid JSON
@@ -212,23 +265,6 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
-
-@app.websocket("/ws/ai-commands")
-async def websocket_ai_commands_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for AI processor to receive frontend commands (clicks, stop, etc.)"""
-    await websocket.accept()
-    ai_command_connections.append(websocket)
-    print("AI Processor connected to command channel")
-    try:
-        while True:
-            await websocket.receive_text()  # Keep connection alive
-    except WebSocketDisconnect:
-        print("AI Processor disconnected from command channel")
-    except Exception as e:
-        print(f"Error in AI command channel: {e}")
-    finally:
-        if websocket in ai_command_connections:
-            ai_command_connections.remove(websocket)
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)

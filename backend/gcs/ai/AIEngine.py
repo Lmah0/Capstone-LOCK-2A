@@ -1,14 +1,30 @@
 import os
 import time
-
 import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
 
+class CursorHandler:
+    """Handles cursor position and click events from user"""
+    def __init__(self):
+        self.cursor_pos = None  # (x, y) or None
+        self.click_pos = None   # (x, y) or None
+
+    def update_cursor(self, x: int, y: int):
+        """Update current cursor position"""
+        self.cursor_pos = (x, y)
+
+    def register_click(self, x: int, y: int):
+        """Register a click event at (x, y)"""
+        self.click_pos = (x, y)
+
+    def clear_click(self):
+        """Clear the registered click event after processing"""
+        self.click_pos = None
+
 class TrackingConfig:
     """Centralized configuration for all tracking and detection parameters"""
-    
     # --- Frame Skipping ---
     DETECTION_FRAME_SKIP = 1  # Skip N frames during detection phase (0=every frame, 1=every 2nd, 2=every 3rd)
     TRACKER_FRAME_SKIP =   1    # Skip N frames during tracking phase (0=every frame, 1=every 2nd)
@@ -45,7 +61,8 @@ _init_tracker_config()
 
 
 class TrackingEngine:
-    def __init__(self, model_path):
+    def __init__(self):
+        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models', 'yolo11n.pt')
         if not os.path.exists(model_path):
             print(f"Warning: Model not found at {model_path}")
             print("YOLO will attempt to download the model...")
@@ -66,8 +83,7 @@ class TrackingEngine:
         """Run YOLO detection"""
         if frame is None or frame.size == 0:
             return None
-        results = self.model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD, 
-                                   iou=TrackingConfig.MODEL_IOU, verbose=False)
+        results = self.model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD, iou=TrackingConfig.MODEL_IOU, verbose=False)
         return results[0]
 
     def _load_vittrack(self):
@@ -102,14 +118,9 @@ class TrackingEngine:
         
         self.tracker.init(frame, bbox)
         self.tracked_bbox = bbox
-        self.tracked_class = self.model.names[class_id]
+        self.tracked_class = class_id
         self.is_tracking = True
         print(f"Engine: Started tracking Class {class_id} with {self.tracker_type.upper()} tracker")
-
-
-
-
-
 
 
 # ============================================================================
@@ -118,8 +129,7 @@ class TrackingEngine:
 
 class ProcessingState:
     """Manages state for detection/tracking processing"""
-    def __init__(self, model=None):
-        self.model = model
+    def __init__(self):
         self.tracking = False
         self.tracker = None
         self.tracked_class = None
@@ -170,7 +180,7 @@ class ProcessingState:
             self.tracker = cv2.TrackerCSRT.create()
         
         self.tracker.init(frame, bbox)
-        self.tracked_class = self.model.names[class_id]
+        self.tracked_class = class_id
         self.tracked_bbox = bbox
         self.tracking = True
         print(f"Started tracking object, class {self.tracked_class}")
@@ -334,6 +344,7 @@ def process_tracking_mode(frame, state):
     else:
         success, bbox = state.last_tracker_bbox if state.last_tracker_bbox else (False, None)
     
+    print(f"Tracking update: success={success}, bbox={bbox}")
     if success and bbox is not None:
         x, y, w, h = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         state.tracked_bbox = (x, y, w, h)
