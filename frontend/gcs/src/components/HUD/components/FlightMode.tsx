@@ -37,7 +37,7 @@ export default function FlightMode({ isMetric, followDistance, flightMode }: Fli
                 </Typography>
             </Box>
 
-            {trackingData.tracking ? (
+            {trackingData?.tracking ? (
                 <Box className="flex flex-col items-end gap-0.5">
                     <Box className="flex items-center gap-1.5">
                         <Typography variant="caption" className="text-neutral-400 text-xs">

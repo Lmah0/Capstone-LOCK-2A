@@ -112,25 +112,25 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     }}
                 >
                     <Box className="flex items-center mb-2">
-                        <StopIcon sx={{ color: trackingData.tracking ? '#ef4444' : '#6b7280', mr: 1.5, fontSize: 20 }} />
+                        <StopIcon sx={{ color: trackingData?.tracking ? '#ef4444' : '#6b7280', mr: 1.5, fontSize: 20 }} />
                         <Typography variant="subtitle1" className="text-white font-semibold">
                             Stop Following
                         </Typography>
                     </Box>
                     <Typography variant="caption" className="text-neutral-300 mb-3 block">
-                        {trackingData.tracking ? 'Stop following the current target' : 'No target being followed'}
+                        {trackingData?.tracking ? 'Stop following the current target' : 'No target being followed'}
                     </Typography>
                     <Button
                         id='stop-following-button'
                         variant="contained"
                         onClick={handleStopFollowing}
-                        disabled={!trackingData.tracking}
+                        disabled={!trackingData?.tracking}
                         fullWidth
                         sx={{
-                            backgroundColor: trackingData.tracking ? '#ef4444' : '#374151',
+                            backgroundColor: trackingData?.tracking ? '#ef4444' : '#374151',
                             color: 'white',
                             '&:hover': {
-                                backgroundColor: trackingData.tracking ? '#dc2626' : '#374151',
+                                backgroundColor: trackingData?.tracking ? '#dc2626' : '#374151',
                             },
                             '&:disabled': {
                                 backgroundColor: '#374151',
@@ -138,7 +138,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                             },
                         }}
                     >
-                        {trackingData.tracking ? 'Stop Following' : 'Not Following'}
+                        {trackingData?.tracking ? 'Stop Following' : 'Not Following'}
                     </Button>
                 </Paper>
 
