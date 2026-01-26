@@ -200,6 +200,29 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
 
+def update_vehicle_position_from_flight_controller():
+    """Update vehicle position from flight controller data"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    sock.bind(("127.0.0.1", 5005))
+    
+    while True:
+        data = sock.recvfrom(1024)
+        items = data[0].decode()[1:-1].split(",")
+        message_time = float(items[0])
+
+        if message_time <= vehicle_data["last_time"]:
+            continue
+
+        if len(items) == len(vehicle_data):
+            vehicle_data["last_time"] = message_time
+
+            for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
+                vehicle_data[key] = float(items[i])
+                print(f"Updated {key} to {vehicle_data[key]}")
+        else:
+            print(f"Received data item does not match expected length...")
 
 if __name__ == "__main__":
     # vehicle_connection = connect_to_vehicle()
