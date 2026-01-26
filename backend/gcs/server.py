@@ -1,30 +1,27 @@
 """ Main server for Ground Control Station (GCS) backend. """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 import uvicorn
 import asyncio
 import json
 import websockets
+import traceback
 from contextlib import asynccontextmanager
 from typing import List
 import os
-from database import get_all_objects, delete_object, record_telemetry_data
-from dotenv import load_dotenv
-import queue
-import base64
 import cv2
+import time
+from database import get_all_objects, delete_object, record_telemetry_data
+from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
+import webRTCStream
+from dotenv import load_dotenv
 
 load_dotenv(dotenv_path="../../.env")
 
-AI_CMDS_LIST = ["click", "stop_tracking", "reselect_object", "mouse_move"]
+VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'video.mp4')
 
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
-ai_command_connections: List[WebSocket] = []  # For AI processor to receive frontend commands
-
-# Larger queue for video frames to handle bursts
-video_frame_queue = queue.Queue(maxsize=10)
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -41,6 +38,11 @@ async def flight_computer_background_task():
                 async for message in ws:
                     try:
                         data = json.loads(message)
+                        data["tracking"] = STATE.tracking # Add tracking state
+                        if STATE.tracked_class is not None and ENGINE.model is not None:
+                            data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
+                        else:
+                            data["tracked_class"] = None
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
                         continue
@@ -50,19 +52,76 @@ async def flight_computer_background_task():
             flight_comp_ws = None
             await asyncio.sleep(5)
 
+async def video_streaming_task():
+    """Background task that reads video, processes through AI, and streams via WebRTC"""
+    cap = cv2.VideoCapture(VIDEO_PATH)
+    if not cap.isOpened():
+        print(f"ERROR: Could not open video file: {VIDEO_PATH}")
+        return
+    
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    frame_delay = 1.0 / fps
+    try:
+        while True:
+            frame_start = time.time()
+            ret, frame = cap.read()    
+            if not ret:
+                # Loop video
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+            
+            # Process frame through AI
+            cursor = CURSOR_HANDLER.cursor_pos
+            click = CURSOR_HANDLER.click_pos
+            
+            annotated_frame = await process_frame(frame, cursor, click)
+
+            if click is not None:
+                CURSOR_HANDLER.clear_click()
+                print("Click cleared")
+        
+            # Send to WebRTC stream
+            if annotated_frame is not None:
+                webRTCStream.push_frame(annotated_frame)
+            
+            # Maintain video FPS
+            elapsed = time.time() - frame_start
+            sleep_time = max(0, frame_delay - elapsed)
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            
+    except asyncio.CancelledError:
+        print("Video streaming task cancelled")
+        raise
+    except Exception as e:
+        print(f"Video streaming error: {e}")
+        traceback.print_exc()
+    finally:
+        cap.release()
+        print("Video capture released")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if (True): # change to false if just testing ai stuff w/o flight computer
-        task = asyncio.create_task(flight_computer_background_task())
-        yield
-        # Shutdown
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-    else:
-        yield
+    # Start background tasks
+    flight_comp_task = asyncio.create_task(flight_computer_background_task())
+    webrtc_task = asyncio.create_task(webRTCStream.start_webrtc_server())
+    video_task = asyncio.create_task(video_streaming_task())
+    
+    yield
+    
+    # Shutdown
+    flight_comp_task.cancel()
+    webrtc_task.cancel()
+    video_task.cancel()
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(flight_comp_task, webrtc_task, video_task, return_exceptions=True), timeout=2.0
+        )
+    except asyncio.TimeoutError:
+        print("Warning: Some tasks did not shut down cleanly")
+    except asyncio.CancelledError:
+        pass
+
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
@@ -119,7 +178,7 @@ def delete_object_endpoint(object_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
 @app.post("/record")
-def record(request: dict = Body(...)):
+async def record(request: dict = Body(...)):
     """Record tracked object data"""
     data = request.get("data")
     if not data:
@@ -131,8 +190,14 @@ def record(request: dict = Body(...)):
         missing = [f for f in required_fields if point.get(f) is None]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
+    
     try:
-        record_telemetry_data(data, classification='Unknown')
+        # Get classification name if tracking, otherwise use "unknown"
+        classification = "unknown"
+        if STATE.tracked_class is not None:
+            classification = ENGINE.model.names[STATE.tracked_class]
+        
+        record_telemetry_data(data, classification=classification)
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
@@ -168,7 +233,8 @@ async def set_flight_mode(request: dict = Body(...)):
 async def stop_following():
     """Stop following the target"""
     try:
-        await send_to_flight_comp({"command": "stop_following"})
+        STATE.reset_tracking()
+        await send_to_flight_comp({"command": "stop_following"}) # sets back to loiter
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
@@ -186,10 +252,12 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = json.loads(message)
                 command_type = data.get("type")
-
-                # Relay AI-related commands to the AI processor
-                if command_type in AI_CMDS_LIST:
-                    await send_data_to_connections(data, ai_command_connections)
+                # Handle mouse movements and clicks for AI
+                if command_type == "mouse_move":
+                    CURSOR_HANDLER.update_cursor(data.get("x"), data.get("y"))
+                elif command_type == "click":
+                    CURSOR_HANDLER.register_click(data.get("x"), data.get("y"))
+                    print(f"Registered click at ({data.get('x')}, {data.get('y')})")
 
             except json.JSONDecodeError:
                 pass  # Just keep connection alive if not valid JSON
@@ -205,132 +273,6 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
-
-# -- AI Integration Sockets --
-@app.websocket("/ws/ai-commands")
-async def websocket_ai_commands_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for AI processor to receive frontend commands (clicks, stop, etc.)"""
-    await websocket.accept()
-    ai_command_connections.append(websocket)
-    print("AI Processor connected to command channel")
-    try:
-        while True:
-            await websocket.receive_text()  # Keep connection alive
-    except WebSocketDisconnect:
-        print("AI Processor disconnected from command channel")
-    except Exception as e:
-        print(f"Error in AI command channel: {e}")
-    finally:
-        if websocket in ai_command_connections:
-            ai_command_connections.remove(websocket)
-            
-@app.websocket("/ws/ai-frame-reader")
-async def websocket_ai_frame_reader_endpoint(websocket: WebSocket):
-    """ Internal WebSocket endpoint to receive JPEG-encoded frames from the Detector Algorithm """
-    await websocket.accept()
-    print("AI Frame Producer Connected.")
-    try:
-        # Expecting raw bytes (base64 encoded JPEG buffer)
-        while True:
-            # Receive base64 string from the AI process
-            base64_frame_data = await websocket.receive_text()
-            
-            # Decode the base64 string back into raw JPEG bytes
-            jpeg_bytes = base64.b64decode(base64_frame_data)
-            
-            # Put the new frame into the queue for the MJPEG streamer
-            try:
-                # Try to add frame without blocking
-                video_frame_queue.put_nowait(jpeg_bytes)
-            except queue.Full:
-                # Queue is full - skip this frame to maintain latency
-                pass
-            
-    except WebSocketDisconnect:
-        print("AI Frame Producer disconnected.")
-    except Exception as e:
-        print(f"Error in /ws/ai_frame: {e}")
-    finally:
-        pass
-
-@app.websocket("/ws/camera-source")
-async def websocket_camera_source_endpoint(websocket: WebSocket):
-    """Mock camera stream - reads video file and streams frames to AI processor"""
-    await websocket.accept()
-    print("AI Processor connected to camera source")
-    # Video file path - this mocks the camera feed
-    BASE_DIR = os.path.dirname(__file__)  # the directory where server.py lives
-    VIDEO_PATH = os.path.join(BASE_DIR, "video.mp4")
-    cap = cv2.VideoCapture(VIDEO_PATH)
-
-    if not cap.isOpened():
-        print(f"Error: Could not open video file at {VIDEO_PATH}")
-        await asyncio.sleep(5)  # Wait before allowing reconnect
-        await websocket.close()
-        return
-
-    try:
-        while True:
-            ret, frame = cap.read()
-
-            # Loop video when it ends
-            if not ret:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
-            # Encode frame as JPEG
-            success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            if not success:
-                continue
-
-            # Send as base64 string
-            base64_frame = base64.b64encode(buffer.tobytes()).decode('utf-8')
-            await websocket.send_text(base64_frame)
-
-            # Control frame rate (~30 fps)
-            await asyncio.sleep(1/30)
-
-    except WebSocketDisconnect:
-        print("AI Processor disconnected from camera source")
-    except Exception as e:
-        print(f"Error in camera source: {e}")
-    finally:
-        cap.release()
-
-async def generate_video_frames():
-    """Reads JPEG frames from the queue and formats them for MJPEG streaming."""
-    frame_boundary = b'--frame\r\n'
-    content_type = b'Content-Type: image/jpeg\r\n\r\n'
-
-    while True:
-        try:
-            # 1. Wait for a new frame
-            jpeg_frame = await asyncio.to_thread(video_frame_queue.get, timeout=0.5)
-
-            # 2. Yield the MJPEG format
-            yield frame_boundary
-            yield content_type
-            yield jpeg_frame
-            yield b'\r\n'
-
-        except queue.Empty:
-            # If the queue is empty, wait briefly and continue
-            await asyncio.sleep(0.0005)  # 0.5ms sleep
-
-        except Exception as e:
-            print(f"Error yielding frame: {e}")
-            break
-
-@app.get("/video_feed")
-async def video_feed():
-    """Stream video frames via MJPEG"""
-    media_type = 'multipart/x-mixed-replace; boundary=frame'
-    return StreamingResponse(
-        generate_video_frames(),
-        media_type=media_type 
-    )
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
