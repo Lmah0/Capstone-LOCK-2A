@@ -13,7 +13,9 @@ def verify_connection(connection):
 
 def connect_to_vehicle(ip_and_port='udp:127.0.0.1:14550'):
     try:
+        print("attempting to connect with ip/port: {}".format(ip_and_port))
         connection = mavutil.mavlink_connection(ip_and_port)
+        print("got connection")
         if verify_connection(connection):
             return connection
         else:
