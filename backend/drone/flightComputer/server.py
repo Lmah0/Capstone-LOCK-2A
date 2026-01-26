@@ -210,10 +210,14 @@ def update_vehicle_position_from_flight_controller():
     while True:
         print("RUNNING IN PARALLEL")
         data = sock.recvfrom(1024)
+        print("GOT DATA FROM FLIGHT CONTROLLER")
         items = data[0].decode()[1:-1].split(",")
+        print("PARSED ITEMS")
         message_time = float(items[0])
+        print("PARSED TIME")
 
         if message_time <= vehicle_data["last_time"]:
+            print("TIME NOT NEWER, CONTINUING")
             continue
 
         if len(items) == len(vehicle_data):
