@@ -182,6 +182,7 @@ def update_vehicle_position_from_flight_controller():
 
             for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
                 vehicle_data[key] = float(items[i])
+                print(f"Updated {key} to {vehicle_data[key]}")
         else:
             print(f"Received data item does not match expected length...")
 
