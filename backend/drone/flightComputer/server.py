@@ -170,6 +170,7 @@ def update_vehicle_position_from_flight_controller():
     sock.bind(("127.0.0.1", 5005))
     
     while True:
+        print("RUNNING IN PARALLEL")
         data = sock.recvfrom(1024)
         items = data[0].decode()[1:-1].split(",")
         message_time = float(items[0])
@@ -178,6 +179,7 @@ def update_vehicle_position_from_flight_controller():
             continue
 
         if len(items) == len(vehicle_data):
+            print("Updating vehicle data from flight controller... len matches")
             vehicle_data["last_time"] = message_time
 
             for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
@@ -190,7 +192,7 @@ if __name__ == "__main__":
     flight_controller_thread = threading.Thread(target=update_vehicle_position_from_flight_controller, daemon=True)
     flight_controller_thread.start()
     time.sleep(0.5) # Give some time for the thread to start
-    
+    '''
     print(f"Attempting to connect to vehicle on: {vehicle_ip}")
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
@@ -200,5 +202,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error verifying vehicle connection: {e}")
         exit(1)
-
+    '''
     uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)
