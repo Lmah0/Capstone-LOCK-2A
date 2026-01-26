@@ -29,8 +29,6 @@ vehicle_data = {
     "last_time": -1.0,
     "latitude": -1.0,
     "longitude": -1.0,
-    "altitude": -1.0,
-    "msl_altitude": -1.0,
     "rth_altitude": -1.0,
     "dlat": -1.0, # Ground X speed (Latitude, positive north)
     "dlon": -1.0, # Ground Y Speed (Longitude, positive east)
@@ -170,25 +168,18 @@ def update_vehicle_position_from_flight_controller():
     sock.bind(("127.0.0.1", 5005))
     
     while True:
-        print("RUNNING IN PARALLEL")
         data = sock.recvfrom(1024)
-        print("GOT DATA FROM FLIGHT CONTROLLER")
         items = data[0].decode()[1:-1].split(",")
-        print("PARSED ITEMS")
         message_time = float(items[0])
-        print("PARSED TIME")
 
         if message_time <= vehicle_data["last_time"]:
-            print("TIME NOT NEWER, CONTINUING")
             continue
 
         if len(items) == len(vehicle_data):
-            print("Updating vehicle data from flight controller... len matches")
             vehicle_data["last_time"] = message_time
 
             for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
                 vehicle_data[key] = float(items[i])
-                print(f"Updated {key} to {vehicle_data[key]}")
         else:
             print(f"Received data item does not match expected length...")
 
