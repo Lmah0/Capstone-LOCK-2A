@@ -1,22 +1,68 @@
+import os
+import time
 import cv2
 import numpy as np
-import time
+import torch
 from ultralytics import YOLO
-import os
+
+class CursorHandler:
+    """Handles cursor position and click events from user"""
+    def __init__(self):
+        self.cursor_pos = None  # (x, y) or None
+        self.click_pos = None   # (x, y) or None
+
+    def update_cursor(self, x: int, y: int):
+        """Update current cursor position"""
+        self.cursor_pos = (x, y)
+
+    def register_click(self, x: int, y: int):
+        """Register a click event at (x, y)"""
+        self.click_pos = (x, y)
+
+    def clear_click(self):
+        """Clear the registered click event after processing"""
+        self.click_pos = None
 
 class TrackingConfig:
     """Centralized configuration for all tracking and detection parameters"""
-    
     # --- Frame Skipping ---
-    DETECTION_FRAME_SKIP = 2  # Skip N frames during detection phase (0=every frame, 1=every 2nd, 2=every 3rd)
-    TRACKER_FRAME_SKIP = 1    # Skip N frames during tracking phase (0=every frame, 1=every 2nd)
+    DETECTION_FRAME_SKIP = 1  # Skip N frames during detection phase (0=every frame, 1=every 2nd, 2=every 3rd)
+    TRACKER_FRAME_SKIP =   1    # Skip N frames during tracking phase (0=every frame, 1=every 2nd)
     
     # --- Detection Parameters ---
     CONFIDENCE_THRESHOLD = 0.1    # YOLO detection confidence threshold
     MODEL_IOU = 0.5               # NMS IOU threshold for YOLO
+    
+    # --- Tracker Configuration ---
+    PREFER_GPU_TRACKER = True     # Use VitTrack if available, otherwise use CSRT
+    TRACKER_TYPE = None           # Will be auto-detected: 'vittrack' or 'csrt'
+    VITTRACK_MODEL = None          # Path to VitTrack model file
+
+def _init_tracker_config():
+    """Initialize tracker type based on GPU availability"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    vittrack_model_path = os.path.join(base_dir, "models", "object_tracking_vittrack_2023sep.onnx")
+    gpu_available = torch.cuda.is_available()
+    
+    # Check GPU first, then VitTrack model availability
+    if gpu_available and TrackingConfig.PREFER_GPU_TRACKER and os.path.exists(vittrack_model_path):
+        TrackingConfig.TRACKER_TYPE = 'vittrack'
+        TrackingConfig.VITTRACK_MODEL = vittrack_model_path
+        print(f"✓ GPU available and VitTrack model found. Using VitTrack tracker (GPU-optimized)")
+    else:
+        if gpu_available and TrackingConfig.PREFER_GPU_TRACKER and not os.path.exists(vittrack_model_path):
+            print(f"⚠ GPU available but VitTrack model not found at {vittrack_model_path}. Using CSRT tracker.")
+        elif not gpu_available and TrackingConfig.PREFER_GPU_TRACKER:
+            print("⚠ No GPU available. Using CSRT tracker (CPU)")
+        TrackingConfig.TRACKER_TYPE = 'csrt'
+        print("Using CSRT tracker (CPU)")
+
+_init_tracker_config()
+
 
 class TrackingEngine:
-    def __init__(self, model_path):
+    def __init__(self):
+        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models', 'yolo11n.pt')
         if not os.path.exists(model_path):
             print(f"Warning: Model not found at {model_path}")
             print("YOLO will attempt to download the model...")
@@ -26,6 +72,7 @@ class TrackingEngine:
         # Public attributes for high-performance direct access (hot path)
         self.model = YOLO(model_path)
         self.tracker = None  # Created on-demand in start_tracking()
+        self.tracker_type = TrackingConfig.TRACKER_TYPE
         
         # State
         self.is_tracking = False
@@ -36,39 +83,44 @@ class TrackingEngine:
         """Run YOLO detection"""
         if frame is None or frame.size == 0:
             return None
-        results = self.model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD, 
-                                   iou=TrackingConfig.MODEL_IOU, verbose=False)
+        results = self.model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD, iou=TrackingConfig.MODEL_IOU, verbose=False)
         return results[0]
 
+    def _load_vittrack(self):
+        """Initialize VitTrack tracker with GPU acceleration if available"""
+        try:
+            params = cv2.TrackerVit_Params()
+            params.net = TrackingConfig.VITTRACK_MODEL
+            
+            # GPU acceleration via OpenCV DNN if available
+            if torch.cuda.is_available():
+                params.backend = cv2.dnn.DNN_BACKEND_CUDA
+                params.target = cv2.dnn.DNN_TARGET_CUDA
+                print("VitTrack: Using CUDA acceleration")
+            else:
+                params.backend = cv2.dnn.DNN_BACKEND_DEFAULT
+                params.target = cv2.dnn.DNN_TARGET_CPU
+            
+            return cv2.TrackerVit.create(params)
+        except Exception as e:
+            print(f"VitTrack initialization failed: {e}. Falling back to CSRT.")
+            return None
+
     def start_tracking(self, frame, bbox, class_id):
-        """Initialize CSRT Tracker"""
-        # Create new tracker for each tracking session (can't reuse after failure)
-        self.tracker = cv2.TrackerCSRT.create()
+        """Initialize tracker (VitTrack if available, else CSRT)"""
+        if self.tracker_type == 'vittrack':
+            self.tracker = self._load_vittrack()
+        
+        # Fall back to CSRT if VitTrack failed or not available
+        if self.tracker is None:
+            self.tracker = cv2.TrackerCSRT.create()
+            self.tracker_type = 'csrt'
+        
         self.tracker.init(frame, bbox)
         self.tracked_bbox = bbox
         self.tracked_class = class_id
         self.is_tracking = True
-        self.detection_history = []
-        print(f"Engine: Started tracking Class {class_id}")
-
-    def update(self, frame, frame_count):
-        """Main update loop for tracking mode"""
-        if not self.is_tracking:
-            return False, None
-
-        # Update CSRT tracker
-        success, bbox = self.tracker.update(frame)
-
-        if success:
-            self.tracked_bbox = bbox
-            return True, self.tracked_bbox
-        else:
-            self.is_tracking = False
-            return False, None
-
-
-
-
+        print(f"Engine: Started tracking Class {class_id} with {self.tracker_type.upper()} tracker")
 
 
 # ============================================================================
@@ -85,11 +137,17 @@ class ProcessingState:
         self.frame_count = 0
         self.last_detection_results = None
         self.last_tracker_bbox = None
+        self.last_rendered_tracking_frame = None  # Cache rendered tracking frame
+        
+        # GPU optimization
+        self.gpu_available = torch.cuda.is_available()
         
         # Fine-grained profiling timings (in ms)
         self.profile_inference_ms = 0.0      # YOLO model inference time
         self.profile_boxes_ms = 0.0          # Box extraction and processing time
         self.profile_drawing_ms = 0.0        # Drawing/visualization time
+        self.profile_frame_to_gpu_ms = 0.0   # Frame CPU->GPU transfer time
+        self.profile_results_to_cpu_ms = 0.0 # Results GPU->CPU transfer time
         self.detection_ran_this_frame = False  # Track if detection actually ran this frame
         
         # Detailed inference breakdown
@@ -100,7 +158,7 @@ class ProcessingState:
         # Input profiling
         self.profile_frame_shape = None
         self.profile_frame_dtype = None
-        self.profile_frame_device = "unknown"
+        self.profile_frame_device = "unknown"  # CPU or GPU
         self.profile_model_device = "unknown"
     
     def reset_tracking(self):
@@ -110,15 +168,23 @@ class ProcessingState:
         self.tracked_class = None
         self.tracked_bbox = None
         self.last_tracker_bbox = None
+        self.last_rendered_tracking_frame = None
     
     def start_tracking(self, frame, bbox, class_id):
         """Initialize tracking from a detection"""
-        self.tracker = cv2.TrackerCSRT.create()
+        if TrackingConfig.TRACKER_TYPE == 'dasiamrpn':
+            # For DaSiamRPN - would need full implementation
+            # For now, fall back to CSRT in ProcessingState
+            self.tracker = cv2.TrackerCSRT.create()
+        else:
+            self.tracker = cv2.TrackerCSRT.create()
+        
         self.tracker.init(frame, bbox)
         self.tracked_class = class_id
         self.tracked_bbox = bbox
         self.tracking = True
-        print(f"Started tracking object, class {class_id}")
+        self.last_tracker_bbox = (True, bbox)
+        print(f"Started tracking object, class {self.tracked_class}")
     
     def increment_frame(self):
         """Increment frame counter"""
@@ -152,6 +218,8 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
     state.profile_inference_ms = 0.0
     state.profile_boxes_ms = 0.0
     state.profile_drawing_ms = 0.0
+    state.profile_frame_prep_ms = 0.0
+    state.profile_results_process_ms = 0.0
     state.detection_ran_this_frame = False
     
     if should_detect:
@@ -160,10 +228,7 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
         # Profile frame inputs
         state.profile_frame_shape = frame.shape
         state.profile_frame_dtype = str(frame.dtype)
-        if hasattr(frame, 'device'):
-            state.profile_frame_device = str(frame.device)
-        else:
-            state.profile_frame_device = "CPU (numpy)"
+        state.profile_frame_device = "GPU" if state.gpu_available else "CPU"
         
         # Profile model device
         try:
@@ -177,31 +242,48 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
         except:
             state.profile_model_device = "unknown"
         
-        # Time frame prep
-        t_frame_prep = time.time()
-        # (frame is already loaded, just a timestamp marker)
-        state.profile_frame_prep_ms = (time.time() - t_frame_prep) * 1000
-        
         # Time the actual model inference
+        # YOLO handles frame format conversion internally, optimized for numpy HWC format
+        # Use device=0 to keep operations on GPU, half=True for fp16 memory efficiency
         t_model_start = time.time()
         results = model.predict(frame, conf=TrackingConfig.CONFIDENCE_THRESHOLD,
-                               iou=TrackingConfig.MODEL_IOU, verbose=False)
+                               iou=TrackingConfig.MODEL_IOU, 
+                               device=0 if state.gpu_available else 'cpu',
+                               half=state.gpu_available, 
+                               verbose=False)
         state.profile_model_predict_ms = (time.time() - t_model_start) * 1000
         
-        # Time result processing
-        t_results_start = time.time()
         state.last_detection_results = results
-        state.profile_results_process_ms = (time.time() - t_results_start) * 1000
+        state.profile_inference_ms = state.profile_model_predict_ms
         
-        state.profile_inference_ms = state.profile_frame_prep_ms + state.profile_model_predict_ms + state.profile_results_process_ms
+        # Periodic GPU memory optimization
+        if state.gpu_available and state.frame_count % 100 == 0:
+            torch.cuda.empty_cache()
     else:
         results = state.last_detection_results
     
-    # Process bounding boxes
+    # Process bounding boxes - convert GPU tensors to numpy only when needed
     if results is not None and results[0].boxes is not None and len(results[0].boxes) > 0:
         t_boxes_start = time.time()
-        boxes = results[0].boxes.xyxy.cpu().numpy().astype(np.int32)
-        classes = results[0].boxes.cls.cpu().numpy()
+        # Safe conversion: handle both GPU tensors and numpy arrays
+        xyxy = results[0].boxes.xyxy
+        cls_vals = results[0].boxes.cls
+        
+        # Convert to numpy if needed (GPU tensor -> CPU numpy)
+        if hasattr(xyxy, 'cpu'):
+            boxes = xyxy.cpu().numpy().astype(np.int32)
+        elif hasattr(xyxy, 'numpy'):
+            boxes = xyxy.numpy().astype(np.int32)
+        else:
+            boxes = np.array(xyxy).astype(np.int32)
+            
+        if hasattr(cls_vals, 'cpu'):
+            classes = cls_vals.cpu().numpy()
+        elif hasattr(cls_vals, 'numpy'):
+            classes = cls_vals.numpy()
+        else:
+            classes = np.array(cls_vals)
+            
         state.profile_boxes_ms = (time.time() - t_boxes_start) * 1000
         
         cursor_x, cursor_y = cursor_pos if cursor_pos else (0, 0)
@@ -221,12 +303,15 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
                 overlay = output_frame.copy()
                 cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 0), -1)
                 output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
-                cv2.putText(output_frame, f"Class {int(classes[i])}", (x1, y1 - 10),
+                
+                class_id = int(classes[i])
+                class_name = model.names[class_id]
+                cv2.putText(output_frame, class_name, (x1, y1 - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 # Click = start tracking
                 if click_pos is not None:
-                    state.start_tracking(frame, (x1, y1, x2 - x1, y2 - y1), int(classes[i]))
+                    state.start_tracking(frame, (x1, y1, x2 - x1, y2 - y1), class_id)
                     mode_changed = True
                     break
         state.profile_drawing_ms = (time.time() - t_drawing_start) * 1000
@@ -253,7 +338,6 @@ def process_tracking_mode(frame, state):
     
     # Determine if we should update tracker this frame
     should_track = (state.frame_count % (TrackingConfig.TRACKER_FRAME_SKIP + 1)) == 0
-    
     if should_track:
         success, bbox = state.tracker.update(frame)
         state.last_tracker_bbox = (success, bbox)
@@ -264,17 +348,22 @@ def process_tracking_mode(frame, state):
         x, y, w, h = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         state.tracked_bbox = (x, y, w, h)
         
-        output_frame = frame.copy()
-        
-        # Draw gradient fill with transparency
-        overlay = output_frame.copy()
-        cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 255, 255), -1)
-        output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
-        
-        # Draw outline
-        cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 200, 200), 2)
-        cv2.putText(output_frame, f"Tracking class {state.tracked_class}", (x, y - 10),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        # Only render when we actually update the tracker
+        if should_track:
+            output_frame = frame.copy()
+            
+            # Draw gradient fill with transparency
+            overlay = output_frame.copy()
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 255, 255), -1)
+            output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
+            
+            # Draw outline
+            cv2.rectangle(output_frame, (x, y), (x + w, y + h), (0, 200, 200), 2)
+            
+            state.last_rendered_tracking_frame = output_frame
+        else:
+            # Reuse cached frame on skipped frames
+            output_frame = state.last_rendered_tracking_frame
         
         return output_frame, True, False
     else:

@@ -11,7 +11,7 @@ import os
 
 # Add Detection/Spike_2.0 to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../Detection/Spike_2.0'))
-from AIEngine import TrackingEngine
+from backend.gcs.ai.AIEngine import TrackingEngine
 
 
 class TestTrackingEngine:
@@ -183,7 +183,7 @@ class TestTrackingEngine:
     @patch('AIEngine.cv2.legacy.TrackerCSRT_create')
     def test_get_tracker_confidence_fallback(self, mock_tracker, mock_yolo, mock_model_path, sample_frame, sample_bbox):
         """Test get_tracker_confidence fallback when method fails"""
-        from AIEngine import TRACKER_CONFIDENCE_THRESHOLD
+        from backend.gcs.ai.AIEngine import TRACKER_CONFIDENCE_THRESHOLD
         
         mock_tracker_instance = Mock()
         mock_tracker_instance.getTrackingResponse.side_effect = Exception("Method not available")

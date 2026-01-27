@@ -131,6 +131,7 @@ export default function VideoFeed() {
 
                 ws.onopen = () => {
                     console.log('WebSocket connected');
+                    setConnectionState('connected');
                 };
 
                 ws.onclose = () => {
@@ -218,28 +219,6 @@ export default function VideoFeed() {
 
         setIsTracking(true);
     }, []);
-
-    // Stop tracking
-    const handleStopTracking = () => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-        wsRef.current.send(JSON.stringify({
-            type: 'stop_tracking'
-        }));
-
-        setIsTracking(false);
-    };
-
-    // Reselect object
-    const handleReselectObject = () => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-        wsRef.current.send(JSON.stringify({
-            type: 'reselect_object'
-        }));
-
-        setIsTracking(false);
-    };
 
     return (
         <div className="w-full h-full relative bg-gray-900">

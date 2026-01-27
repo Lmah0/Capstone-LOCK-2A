@@ -12,6 +12,7 @@ torch==2.5.1
 geographiclib==2.1
 av
 aiortc
+aiohttp
 # Testing Dependencies
 pytest
 pytest-asyncio

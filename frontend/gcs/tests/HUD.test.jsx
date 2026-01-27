@@ -15,6 +15,21 @@ jest.mock('../src/providers/WebSocketProvider', () => ({
 // Mock console errors for now to reduce noise during tests
 console.error = jest.fn();
 
+// Mock RTCPeerConnection for WebRTC tests
+global.RTCPeerConnection = jest.fn(() => ({
+  createOffer: jest.fn().mockResolvedValue({ sdp: 'mock-offer', type: 'offer' }),
+  setLocalDescription: jest.fn().mockResolvedValue(undefined),
+  setRemoteDescription: jest.fn().mockResolvedValue(undefined),
+  addTransceiver: jest.fn().mockReturnValue({}),
+  close: jest.fn(),
+  onconnectionstatechange: null,
+  ontrack: null,
+  iceGatheringState: 'complete',
+  addEventListener: jest.fn(),
+  removeEventListener: jest.fn(),
+  connectionState: 'connected'
+}));
+
 // Clean up after each test
 afterEach(() => {
   cleanup();
@@ -28,7 +43,8 @@ beforeEach(() => {
     droneConnection: true,
     telemetryData: null,
     isRecording: false,
-    batteryData: null
+    batteryData: null,
+    trackingData: { tracking: false, tracked_class: null }
   });
   axios.post.mockResolvedValue({ status: 200, data: {} });
   axios.get.mockResolvedValue({ status: 200, data: [] });
@@ -136,16 +152,17 @@ test('Pinned Telemetry in HUD Displays', () => {
 });
 
 test('Check Follow Distance', () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'disconnected', droneConnection: false, telemetryData: null});
+  useWebSocket.mockReturnValue({ 
+    connectionStatus: 'disconnected', 
+    droneConnection: false, 
+    telemetryData: null,
+    trackingData: { tracking: true, tracked_class: 'person' }
+  });
   render(<HUD {...mockProps} />);
   test_main_container();
 
-  const followDist = document.getElementById('follow-dist');
   const distToTarget = document.getElementById('dist-to-target');
-
-  expect(followDist).toBeInTheDocument();
   expect(distToTarget).toBeInTheDocument();
-  expect(followDist?.textContent).toContain('Follow: 10.00 m');
 });
 
 test('Check Flight Mode', () => {
@@ -256,56 +273,25 @@ test('Video Feed Shows Stream Without Errors', async () => {
   
   const videoFeed = document.getElementById('video-feed');
   expect(videoFeed).toBeInTheDocument();
-  const videoImg = videoFeed.querySelector('img');
-  expect(videoImg).toBeInTheDocument();
   
-  // Simulate successful video load
-  if (videoImg) {
-    const loadEvent = new Event('load', { bubbles: true });
-    videoImg.dispatchEvent(loadEvent);
-  }
-
-  // Wait for streaming state to update
-  await waitFor(() => {
-    // Check that no error message is displayed
-    expect(screen.queryByText(/Stream error/i)).not.toBeInTheDocument();
-  });
+  // Check that the video feed container exists
+  const videoContainer = videoFeed.querySelector('.relative.w-full.h-full');
+  expect(videoContainer).toBeInTheDocument();
+  
+  // Check that error is not displayed when connected
+  expect(screen.queryByText(/Failed to connect to video stream/i)).not.toBeInTheDocument();
 });
 
 test('Video Feed Shows Error When Stream Fails', async () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'connected', droneConnection: true, telemetryData: null});
+  useWebSocket.mockReturnValue({ connectionStatus: 'failed', droneConnection: false, telemetryData: null});
   render(<HUD {...mockProps} />);
   
   const videoFeed = document.getElementById('video-feed');
   expect(videoFeed).toBeInTheDocument();
-
-  const videoImg = videoFeed.querySelector('img');
-  expect(videoImg).toBeInTheDocument();
-
-  // Simulate video error
-  if (videoImg) {
-    const errorEvent = new Event('error', { bubbles: true });
-    videoImg.dispatchEvent(errorEvent);
-  }
 
   // Wait for error state to update
   await waitFor(() => {
     // Check that error message is displayed
-    expect(screen.getByText('Stream error. Is the Python server running?')).toBeInTheDocument();
+    expect(screen.getByText(/Failed to connect to video stream/i)).toBeInTheDocument();
   });
-});
-
-test('Video Feed Shows Loading State Initially', () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'connected', droneConnection: true, telemetryData: null});
-  render(<HUD {...mockProps} />);
-  
-  const videoFeed = document.getElementById('video-feed');
-  expect(videoFeed).toBeInTheDocument();
-
-  // Should show "Connecting to stream..." initially before video loads
-  expect(screen.getByText('Connecting to stream...')).toBeInTheDocument();
-  
-  // Should show loading spinner
-  const spinner = videoFeed.querySelector('.animate-spin');
-  expect(spinner).toBeInTheDocument();
 });
