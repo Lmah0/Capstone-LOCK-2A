@@ -414,5 +414,6 @@ def process_tracking_mode(frame, state):
         
         return output_frame, True, False
     else:
+        print("Lost tracking, resuming detection")
         state.reset_tracking()
         return None, False, True
