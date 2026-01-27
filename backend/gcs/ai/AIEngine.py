@@ -40,35 +40,46 @@ class TrackingConfig:
     VITTRACK_MODEL = None          # Path to VitTrack model file
 
 class TelemetryRecorder:
-    """Handles UAV telemetry (heartbeat) and target location from AI"""
-    def __init__(self):
-        self._lock = Lock()
-        
-        # Target location 
-        self.target_lat = None
-        self.target_lon = None
+    def __init__(self, recording_interval: int = 10):
+        self.recording_interval = recording_interval
+        self._interval_counter = 0
 
-    def set_target(self, target_lat, target_lon):
-        """Set target location (called by AI.py after locate())"""
-        with self._lock:
-            self.target_lat = target_lat
-            self.target_lon = target_lon
+        self.is_recording = False
+        self.recorded_data = []
 
-    def clear_target(self):
-        """Clear target location - thread-safe"""
-        with self._lock:
-            self.target_lat = None
-            self.target_lon = None
+    def start(self):
+        self.is_recording = True
+        self._interval_counter = 0
+        self.recorded_data.clear()
 
-    def get_target(self):
-        """Get target location - thread-safe"""
-        with self._lock:
-            if self.target_lat is None or self.target_lon is None:
-                return None
-            return {
-                'latitude': self.target_lat,
-                'longitude': self.target_lon
-            }
+    def stop(self):
+        self.is_recording = False
+        return self.recorded_data
+
+    def record_telemetry(self, data: dict, tracking: bool):
+        """
+        Record telemetry only if:
+        - recording enabled
+        - tracking enabled
+        - interval threshold reached
+        """
+        if not self.is_recording or not tracking:
+            return
+
+        self._interval_counter += 1
+        if self._interval_counter < self.recording_interval:
+            return
+
+        self._interval_counter = 0
+
+        self.recorded_data.append({
+            "timestamp": data.get("timestamp"),
+            "latitude": float(data.get("latitude", 0)),
+            "longitude": float(data.get("longitude", 0)),
+            "altitude": float(data.get("altitude", 0)),
+            "speed": float(data.get("speed", 0)),
+            "heading": float(data.get("heading", 0)),
+        })
 
 def _init_tracker_config():
     """Initialize tracker type based on GPU availability"""

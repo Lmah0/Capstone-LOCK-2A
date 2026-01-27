@@ -12,7 +12,7 @@ import os
 import cv2
 import time
 from database import get_all_objects, delete_object, record_telemetry_data
-from ai.AI import ENGINE, STATE, CURSOR_HANDLER, TELEMETRY, process_frame
+from ai.AI import ENGINE, STATE, CURSOR_HANDLER, TELEMETRY_RECORDER, process_frame
 import webRTCStream
 from dotenv import load_dotenv
 
@@ -39,21 +39,16 @@ async def flight_computer_background_task():
                     try:
                         data = json.loads(message)
 
-                        target = TELEMETRY.get_target()
-
-                        if target is not None:
-                            # Override UAV target position with AI output when tracking
-                            data["latitude"] = target['latitude']
-                            data["longitude"] = target['longitude']
-                        else:
-                            # Not tracking, use UAV flight controller position
-                            continue  
-
                         data["tracking"] = STATE.tracking # Add tracking state
                         if STATE.tracked_class is not None and ENGINE.model is not None:
                             data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
                         else:
                             data["tracked_class"] = None
+
+                        TELEMETRY_RECORDER.record_telemetry(
+                            data=data,
+                            tracking=STATE.tracking
+                        )
 
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
@@ -189,37 +184,23 @@ def delete_object_endpoint(object_id: str):
     except Exception :
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
-@app.post("/record")
-async def record(request: dict = Body(...)):
-    """Record tracked object data"""
-    data = request.get("data")
-    if not data:
-        raise HTTPException(status_code=400, detail="Missing 'data'")
-    
-    required_fields = ("timestamp", "latitude", "longitude", "tracking")
-    valid_points = []
-    # Validate point data
-    for idx, point in enumerate(data):
-        if not point.get("tracking"):
-            continue
-        missing = [f for f in required_fields if point.get(f) is None]
-        if missing:
-            raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
-        valid_points.append(point)
+@app.post("/recording")
+def toggle_recording():
+    if TELEMETRY_RECORDER.is_recording:
+        recorded = TELEMETRY_RECORDER.stop()
+        if recorded:
+            try:
+                record_telemetry_data(recorded, classification=STATE.tracked_class)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to save recording data: {str(e)}"
+                )
+        return {"is_recording": False}
 
-    if len(valid_points) == 0:
-        return {"status": 200, "message": "No tracking data to record."}
+    TELEMETRY_RECORDER.start()
+    return {"is_recording": True}
 
-    try:
-        # Get classification name if tracking, otherwise use "unknown"
-        classification = "unknown"
-        if STATE.tracked_class is not None and ENGINE.model is not None:
-            classification = ENGINE.model.names[STATE.tracked_class]
-        
-        record_telemetry_data(valid_points, classification=classification)
-        return {"status": 200, "message": "Data recorded successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
 
 # -- Database Endpoints --
 
