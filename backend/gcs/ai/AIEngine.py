@@ -40,8 +40,8 @@ class TrackingConfig:
     VITTRACK_MODEL = None          # Path to VitTrack model file
 
 class TelemetryRecorder:
-    def __init__(self, recording_interval: int = 10):
-        self.recording_interval = recording_interval
+    def __init__(self):
+        self.recording_interval = 5
         self._interval_counter = 0
 
         self.is_recording = False
@@ -65,21 +65,28 @@ class TelemetryRecorder:
         """
         if not self.is_recording or not tracking:
             return
-
+        
+        # Record every 5th data point
         self._interval_counter += 1
         if self._interval_counter < self.recording_interval:
             return
 
         self._interval_counter = 0
 
-        self.recorded_data.append({
-            "timestamp": data.get("timestamp"),
-            "latitude": float(data.get("latitude", 0)),
-            "longitude": float(data.get("longitude", 0)),
-            "altitude": float(data.get("altitude", 0)),
-            "speed": float(data.get("speed", 0)),
-            "heading": float(data.get("heading", 0)),
-        })
+        try:
+            point = {
+                "timestamp": data["timestamp"],
+                "latitude": float(data["latitude"]),
+                "longitude": float(data["longitude"]),
+                "altitude": float(data["altitude"]),
+                "speed": float(data["speed"]),
+                "heading": float(data["heading"]),
+            }
+        except (KeyError, TypeError, ValueError) as e:
+            print(f"Telemetry Recorder. Invalid data format: {e}")
+            return  # Missing or invalid data → skip
+
+        self.recorded_data.append(point)
 
 def _init_tracker_config():
     """Initialize tracker type based on GPU availability"""
@@ -407,6 +414,5 @@ def process_tracking_mode(frame, state):
         
         return output_frame, True, False
     else:
-        print("Lost tracking, resuming detection")
         state.reset_tracking()
         return None, False, True

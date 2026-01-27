@@ -35,6 +35,9 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     }, [followDistance, isMetric]);
 
     const handleHudToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setShowHUDElements(event.target.checked);
+    };
+    const handleRecordingToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         axios.post('http://localhost:8766/recording')
         .then(response => {
             setIsRecording(response.data.is_recording);
@@ -42,9 +45,6 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
         .catch(error => {
             console.error('Error toggling recording:', error);
         });
-    };
-    const handleRecordingToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setIsRecording(event.target.checked);
     };
     const handleMetricToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         setIsMetric(event.target.value === 'metric');

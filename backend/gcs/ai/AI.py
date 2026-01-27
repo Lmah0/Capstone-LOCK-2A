@@ -84,7 +84,6 @@ async def process_frame(frame, cursor_pos=None, click_pos=None):
             output_frame, _, mode_changed = process_detection_mode(frame, ENGINE.model, STATE, (cursor_x, cursor_y), click_pos)
         else:
             # --- TRACKING MODE ---
-            print("Processing frame in TRACKING mode")
             output_frame, tracking_succeeded, mode_changed = process_tracking_mode(frame, STATE)
             
             # Geolocation processing - only run every N frames to reduce computational load
@@ -108,7 +107,6 @@ async def process_frame(frame, cursor_pos=None, click_pos=None):
                 obj_y_px = bbox_center_y - image_center_y
                 
                 target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
-                print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
         
         # Return annotated frame or original if no annotation
         display_frame = output_frame if output_frame is not None else frame

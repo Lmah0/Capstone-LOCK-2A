@@ -234,7 +234,6 @@ async def stop_following():
     """Stop following the target"""
     try:
         STATE.reset_tracking()
-        TELEMETRY.clear_target()
         await send_to_flight_comp({"command": "stop_following"}) # sets back to loiter
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
@@ -276,4 +275,5 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
+    # Uvicorn reload spawns multiple processes which caused duplicate imports (split-brain issue, states created twice), changed to reload=false to emsure a single shared state
+    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=False)
