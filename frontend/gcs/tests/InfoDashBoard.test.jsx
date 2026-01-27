@@ -1,4 +1,4 @@
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import InfoDashBoard from '../src/components/InfoDashBoard/InfoDashBoard';
 import { useWebSocket } from '../src/providers/WebSocketProvider';
@@ -20,7 +20,6 @@ beforeEach(() => {
     connectionStatus: 'connected',
     droneConnection: true,
     telemetryData: null,
-    isRecording: false,
     batteryData: null,
     trackingData: { tracking: false, tracked_class: null },
   });
@@ -43,7 +42,9 @@ const mockProps = {
   followDistance: 10,
   setFollowDistance: jest.fn(),
   flightMode: 'Manual',
-  setFlightMode: jest.fn()
+  setFlightMode: jest.fn(),
+  isRecording: false,
+  setIsRecording: jest.fn()
 };
 
 const mock_telemetry = {
@@ -198,13 +199,8 @@ test('Controls Tab Displays Controls', () => {
   expect(hudToggle).toBeInTheDocument();
 });
 
-test('Toggle Recording', () => {
-  const mockSetIsRecording = jest.fn();
-  useWebSocket.mockReturnValue({ 
-    isRecording: false, 
-    setIsRecording: mockSetIsRecording,
-    trackingData: { tracking: false, tracked_class: null }
-  });
+test('Toggle Recording', async () => {
+  axios.post.mockResolvedValue({ data: { is_recording: true } });
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();
 
@@ -213,10 +209,12 @@ test('Toggle Recording', () => {
 
   const recordButton = document.getElementById('record-switch');
   expect(recordButton).toBeInTheDocument();
-
+    
   // Simulate clicking the record button
   fireEvent.click(recordButton);
-  expect(mockSetIsRecording).toHaveBeenCalledWith(true);
+  await waitFor(() => {
+    expect(mockProps.setIsRecording).toHaveBeenCalledWith(true);
+  });
 });
 
 test('Metric to Imperial Toggle', () => {
