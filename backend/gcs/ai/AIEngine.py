@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
-from threading import Lock
 
 class CursorHandler:
     """Handles cursor position and click events from user"""
@@ -38,37 +37,6 @@ class TrackingConfig:
     PREFER_GPU_TRACKER = True     # Use VitTrack if available, otherwise use CSRT
     TRACKER_TYPE = None           # Will be auto-detected: 'vittrack' or 'csrt'
     VITTRACK_MODEL = None          # Path to VitTrack model file
-
-class TelemetryRecorder:
-    """Handles UAV telemetry (heartbeat) and target location from AI"""
-    def __init__(self):
-        self._lock = Lock()
-        
-        # Target location 
-        self.target_lat = None
-        self.target_lon = None
-
-    def set_target(self, target_lat, target_lon):
-        """Set target location (called by AI.py after locate())"""
-        with self._lock:
-            self.target_lat = target_lat
-            self.target_lon = target_lon
-
-    def clear_target(self):
-        """Clear target location - thread-safe"""
-        with self._lock:
-            self.target_lat = None
-            self.target_lon = None
-
-    def get_target(self):
-        """Get target location - thread-safe"""
-        with self._lock:
-            if self.target_lat is None or self.target_lon is None:
-                return None
-            return {
-                'latitude': self.target_lat,
-                'longitude': self.target_lon
-            }
 
 def _init_tracker_config():
     """Initialize tracker type based on GPU availability"""
@@ -337,6 +305,9 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
                 output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
                 
                 class_id = int(classes[i])
+                class_name = model.names[class_id]
+                cv2.putText(output_frame, class_name, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 # Click = start tracking
                 if click_pos is not None:

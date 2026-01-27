@@ -12,7 +12,7 @@ import os
 import cv2
 import time
 from database import get_all_objects, delete_object, record_telemetry_data
-from ai.AI import ENGINE, STATE, CURSOR_HANDLER, TELEMETRY, process_frame
+from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
 import webRTCStream
 from dotenv import load_dotenv
 
@@ -38,23 +38,11 @@ async def flight_computer_background_task():
                 async for message in ws:
                     try:
                         data = json.loads(message)
-
-                        target = TELEMETRY.get_target()
-
-                        if target is not None:
-                            # Override UAV target position with AI output when tracking
-                            data["latitude"] = target['latitude']
-                            data["longitude"] = target['longitude']
-                        else:
-                            # Not tracking, use UAV flight controller position
-                            continue  
-
                         data["tracking"] = STATE.tracking # Add tracking state
                         if STATE.tracked_class is not None and ENGINE.model is not None:
                             data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
                         else:
                             data["tracked_class"] = None
-
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
                         continue
@@ -195,28 +183,21 @@ async def record(request: dict = Body(...)):
     data = request.get("data")
     if not data:
         raise HTTPException(status_code=400, detail="Missing 'data'")
-    
-    required_fields = ("timestamp", "latitude", "longitude", "tracking")
-    valid_points = []
+
+    required_fields = ("timestamp", "latitude", "longitude")
     # Validate point data
     for idx, point in enumerate(data):
-        if not point.get("tracking"):
-            continue
         missing = [f for f in required_fields if point.get(f) is None]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
-        valid_points.append(point)
-
-    if len(valid_points) == 0:
-        return {"status": 200, "message": "No tracking data to record."}
-
+    
     try:
         # Get classification name if tracking, otherwise use "unknown"
         classification = "unknown"
-        if STATE.tracked_class is not None and ENGINE.model is not None:
+        if STATE.tracked_class is not None:
             classification = ENGINE.model.names[STATE.tracked_class]
         
-        record_telemetry_data(valid_points, classification=classification)
+        record_telemetry_data(data, classification=classification)
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
@@ -253,7 +234,6 @@ async def stop_following():
     """Stop following the target"""
     try:
         STATE.reset_tracking()
-        TELEMETRY.clear_target()
         await send_to_flight_comp({"command": "stop_following"}) # sets back to loiter
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
