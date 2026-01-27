@@ -72,19 +72,6 @@ async def send_data_to_connections(message: dict):
 
 async def send_telemetry_data():
     while True:
-        # basic_telemetry = {
-        #     "timestamp": datetime.datetime.now().timestamp(),
-        #     "latitude": random.uniform(40.7123, 60.7133),
-        #     "longitude": random.uniform(-74.0065, -60.0055),
-        #     "altitude": random.uniform(145.0, 155.0),
-        #     "speed": random.uniform(20.0, 30.0),
-        #     "heading": random.randint(0, 360),
-        #     "roll": random.uniform(-5.0, 5.0),
-        #     "pitch": random.uniform(-5.0, 5.0),
-        #     "yaw": random.uniform(-5.0, 5.0),
-        #     "battery_remaining": random.uniform(30.0, 100.0),
-        #     "battery_voltage": random.uniform(10.1, 80.6)
-        # }
         await send_data_to_connections(vehicle_data)
         await asyncio.sleep(1)
 
@@ -121,7 +108,7 @@ def moveToLocation(location):
     if not location or "lat" not in location or "lon" not in location or "alt" not in location:
         raise ValueError("Invalid location data")
     try:
-        # Replace none with vehicle connection when available
+        print(f"Moving to location - lat: {location['lat']}, lon: {location['lon']}, alt: {location['alt']}")        
         move_to_location(vehicle_connection, location["lat"], location["lon"], location["alt"])
     except Exception as e:
         raise RuntimeError(f"Failed to move to location: {e}")
