@@ -174,12 +174,53 @@ async def video_streaming_task():
             cap.release()
 
 
+async def follows_background_task():
+    """Background task that manages following target logic"""
+    while True:
+        if STATE.tracking:
+            follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
+            if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
+                try:
+                    await send_to_flight_comp({
+                        "command": "move_to_location",
+                        "location": {
+                            "lat": STATE.last_target_lat,
+                            "lon": STATE.last_target_lon,
+                            "alt": follows_altitude
+                        }
+                    })
+                    print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
+                except Exception as e:
+                    print(f"Failed to send follow command: {e}")
+        await asyncio.sleep(2)
+
+async def follows_background_task():
+    """Background task that manages following target logic"""
+    while True:
+        if STATE.tracking:
+            follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
+            if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
+                try:
+                    await send_to_flight_comp({
+                        "command": "move_to_location",
+                        "location": {
+                            "lat": STATE.last_target_lat,
+                            "lon": STATE.last_target_lon,
+                            "alt": follows_altitude
+                        }
+                    })
+                    print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
+                except Exception as e:
+                    print(f"Failed to send follow command: {e}")
+        await asyncio.sleep(2)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start background tasks
     flight_comp_task = asyncio.create_task(flight_computer_background_task())
     webrtc_task = asyncio.create_task(webRTCStream.start_webrtc_server())
     video_task = asyncio.create_task(video_streaming_task())
+    follows_task = asyncio.create_task(follows_background_task())
 
     yield
 
@@ -187,11 +228,13 @@ async def lifespan(app: FastAPI):
     flight_comp_task.cancel()
     webrtc_task.cancel()
     video_task.cancel()
+    follows_task.cancel()
+
     video_stop_event.set()
     try:
         await asyncio.wait_for(
             asyncio.gather(
-                flight_comp_task, webrtc_task, video_task, return_exceptions=True
+                flight_comp_task, webrtc_task, video_task, follows_task, return_exceptions=True
             ),
             timeout=2.0,
         )

@@ -158,7 +158,7 @@ def moveToLocation(location):
     ):
         raise ValueError("Invalid location data")
     try:
-        # Replace none with vehicle connection when available
+        print(f"Moving to location - lat: {location['lat']}, lon: {location['lon']}, alt: {location['alt']}")        
         move_to_location(None, location["lat"], location["lon"], location["alt"])
     except Exception as e:
         raise RuntimeError(f"Failed to move to location: {e}")
