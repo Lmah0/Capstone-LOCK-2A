@@ -7,12 +7,13 @@ import asyncio
 import traceback
 import numpy as np
 from collections import deque
-from .AIEngine import TrackingEngine, ProcessingState, CursorHandler, process_detection_mode, process_tracking_mode
+from .AIEngine import TelemetryRecorder, TrackingEngine, ProcessingState, CursorHandler, process_detection_mode, process_tracking_mode
 from GeoLocate import locate
 
 ENGINE = TrackingEngine()
 STATE = ProcessingState()
 CURSOR_HANDLER = CursorHandler()
+TELEMETRY = TelemetryRecorder()
 
 # Basic FPS tracking (minimal overhead)
 STATS_WINDOW = 100
@@ -81,6 +82,7 @@ async def process_frame(frame, cursor_pos=None, click_pos=None):
         if not STATE.tracking:
             # --- DETECTION MODE ---
             output_frame, _, mode_changed = process_detection_mode(frame, ENGINE.model, STATE, (cursor_x, cursor_y), click_pos)
+            TELEMETRY.clear_target()
         else:
             # --- TRACKING MODE ---
             print("Processing frame in TRACKING mode")
@@ -107,6 +109,7 @@ async def process_frame(frame, cursor_pos=None, click_pos=None):
                 obj_y_px = bbox_center_y - image_center_y
                 
                 target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
+                TELEMETRY.set_target(target_lat, target_lon)
                 print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
         
         # Return annotated frame or original if no annotation
