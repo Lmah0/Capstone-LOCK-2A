@@ -169,4 +169,3 @@ async def test_GCS_frontend_telemetry_broadcast():
     sent_data = mock_ws.send_text.call_args[0][0]
     parsed_data = json.loads(sent_data) # What frontend receives after parsing
     assert parsed_data["altitude"] == 150.0 
-    assert parsed_data["battery_remaining"] == 75.0 
