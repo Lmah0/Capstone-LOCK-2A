@@ -15,9 +15,9 @@ import datetime
 import threading
 import socket
 import time
+from mavlinkMessages.mode import set_mode
 from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
-from mavlinkMessages.mode import set_mode
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -125,8 +125,11 @@ def return_telemetry_data():
 
 def setFlightMode(mode: str):
     """Set the flight mode of the drone"""
+    print(f"Received request to set flight mode: {mode}")
     if not mode:
-        raise ValueError("Flight mode cannot be empty")
+        raise ValueError("Flight mode cannot be empty.")
+    if vehicle_connection is None:
+        raise RuntimeError("Vehicle connection is not established.")
     try:
         print(f"Setting flight mode to: {mode}")
     except Exception as e:
@@ -221,7 +224,6 @@ def update_vehicle_position_from_flight_controller():
 
             for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
                 vehicle_data[key] = float(items[i])
-                print*(f"Updated {key} to {vehicle_data[key]}")
         else:
             print(f"Received data item does not match expected length...")
 
