@@ -10,26 +10,13 @@ import mock_db # Mock database to avoid real DB calls. Simply tests the logic.
 from server import app, send_data_to_connections
 
 test_telemetry = {
-    # "timestamp": '2024-10-01T12:00:00Z',
-    # "latitude": 123.4567,
-    # "longitude": -123.4567,
-    # "altitude": 150.0,
-    # "speed": 25.5,
-    # "heading": 90,
-    # "roll": 2.5,
-    # "pitch": 1.5,
-    # "yaw": 0.5,
-    # "battery_remaining": 75.0,
-    # "battery_voltage": 12.5
-    "timestamp": 1700000000.0,
-    "lat": 123.4567,
-    "lon": -123.4567,
-    "rel_alt": 150.0,
-    "alt": 155.0,
-    "dlat": 0.5,
-    "dlon": 0.0,
-    "dalt": -0.2,
-    "heading": 90.0,
+    "timestamp": '2024-10-01T12:00:00Z',
+    "latitude": 123.4567,
+    "longitude": -123.4567,
+    "altitude": 150.0,
+    "dlat": 2.0, # Ground X speed (Latitude, positive north)
+    "dlon": 3.0, # Ground Y Speed (Longitude, positive east)
+    "dalt": 4.0, # Ground Z speed (Altitude, positive down)
     "roll": 2.5,
     "pitch": 1.5,
     "yaw": 0.5,

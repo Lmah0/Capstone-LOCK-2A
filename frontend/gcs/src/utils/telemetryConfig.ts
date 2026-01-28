@@ -11,7 +11,6 @@ export interface TelemetryData {
   altitude: number;
   latitude: number;
   longitude: number;
-  heading: number;
   roll: number;
   pitch: number;
   yaw: number;
@@ -28,14 +27,14 @@ export interface TelemetryItem {
 export const telemetryConfig: Record<string, TelemetryItem> = {
   speed: {
     icon: SpeedIcon,
-    label: "Ground Speed",
+    label: "Speed",
     tooltip: "Current speed of the vehicle",
     color: "#3b82f6"
   },
   altitude: {
     icon: FlightIcon,
     label: "Altitude",
-    tooltip: "Current altitude above sea level",
+    tooltip: "Relative altitude to takeoff point",
     color: "#10b981"
   },
   latitude: {
@@ -49,12 +48,6 @@ export const telemetryConfig: Record<string, TelemetryItem> = {
     label: "Longitude",
     tooltip: "Current longitude position",
     color: "#f56f50"
-  },
-  heading: {
-    icon: ExploreIcon,
-    label: "Heading",
-    tooltip: "Current heading/orientation",
-    color: "#8b5cf6"
   },
   roll: {
     icon: RotateRightIcon,

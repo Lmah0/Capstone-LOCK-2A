@@ -54,11 +54,9 @@ interface InfoDashBoardProps {
     setPinnedTelemetry: React.Dispatch<React.SetStateAction<string[]>>;
     followDistance: number;
     setFollowDistance: React.Dispatch<React.SetStateAction<number>>;
-    flightMode: string;
-    setFlightMode: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance, flightMode, setFlightMode }: InfoDashBoardProps) {
+export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isMetric, setIsMetric, pinnedTelemetry, setPinnedTelemetry, followDistance, setFollowDistance}: InfoDashBoardProps) {
     const {droneConnection, isRecording, setIsRecording} = useWebSocket();
     const [value, setValue] = useState(0);
 
@@ -138,8 +136,6 @@ export default function InfoDashBoard({ showHUDElements, setShowHUDElements, isM
                             setIsMetric={setIsMetric}
                             followDistance={followDistance}
                             setFollowDistance={setFollowDistance}
-                            flightMode={flightMode}
-                            setFlightMode={setFlightMode}
                         />
                     </TabPanel>
                     <TabPanel value={value} index={2}>
