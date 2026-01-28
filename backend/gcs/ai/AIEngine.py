@@ -139,6 +139,10 @@ class ProcessingState:
         self.last_tracker_bbox = None
         self.last_rendered_tracking_frame = None  # Cache rendered tracking frame
         
+        # Last target geolocation
+        self.last_target_lat = None
+        self.last_target_lon = None
+
         # GPU optimization
         self.gpu_available = torch.cuda.is_available()
         
