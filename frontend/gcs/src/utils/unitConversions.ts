@@ -123,7 +123,6 @@ export const formatUnits = {
         return formatUnits.altitude(value, isMetric);
       case 'latitude':
       case 'longitude':
-      case 'heading':
       case 'roll':
       case 'pitch':
       case 'yaw':

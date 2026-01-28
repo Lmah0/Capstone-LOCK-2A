@@ -9,7 +9,6 @@ export default function Home() {
   const [isMetric, setIsMetric] = useState(true);
   const [pinnedTelemetry, setPinnedTelemetry] = useState<string[]>(['speed', 'altitude', 'latitude', 'longitude']);
   const [followDistance, setFollowDistance] = useState(20.0);
-  const [flightMode, setFlightMode] = useState('');
 
   // Load pinned telemetry from localStorage on component mount
   useEffect(() => {
@@ -51,7 +50,6 @@ export default function Home() {
             pinnedTelemetry={pinnedTelemetry} 
             isMetric={isMetric} 
             followDistance={followDistance}
-            flightMode={flightMode}
         />
       </div>
       
@@ -66,8 +64,6 @@ export default function Home() {
               setPinnedTelemetry={setPinnedTelemetry}
               followDistance={followDistance}
               setFollowDistance={setFollowDistance}
-              flightMode={flightMode}
-              setFlightMode={setFlightMode}
           />
         </div>
       )}

@@ -76,9 +76,6 @@ export default function TelemetryData({ pinnedTelemetry, isMetric }: TelemetryDa
           case 'longitude':
             displayValue = formatUnits.degrees(telemetryData?.longitude);
             break;
-          case 'heading':
-            displayValue = formatUnits.degrees(telemetryData?.heading);
-            break;
           case 'roll':
             displayValue = formatUnits.degrees(telemetryData?.roll);
             break;
