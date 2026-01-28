@@ -13,9 +13,9 @@ import datetime
 import threading
 import socket
 import time
+from mavlinkMessages.mode import set_mode
 from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
-from mavlinkMessages.mode import set_mode
 
 load_dotenv(dotenv_path="../../../.env")
 
@@ -94,8 +94,11 @@ async def send_telemetry_data():
 
 def setFlightMode(mode: str):
     """Set the flight mode of the drone"""
+    print(f"Received request to set flight mode: {mode}")
     if not mode:
-        raise ValueError("Flight mode cannot be empty")
+        raise ValueError("Flight mode cannot be empty.")
+    if vehicle_connection is None:
+        raise RuntimeError("Vehicle connection is not established.")
     try:
         set_mode(vehicle_connection, mode)
         print(f"Setting flight mode to: {mode}")
@@ -184,7 +187,6 @@ def update_vehicle_position_from_flight_controller():
 
             for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
                 vehicle_data[key] = float(items[i])
-                print*(f"Updated {key} to {vehicle_data[key]}")
         else:
             print(f"Received data item does not match expected length...")
 
@@ -197,10 +199,17 @@ if __name__ == "__main__":
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
     try:
-        verify_connection(vehicle_connection)
-        print("Vehicle connection verfied.")
+        is_connected = verify_connection(vehicle_connection)
+        if is_connected:
+            print("Vehicle connection verified.")
+        else:
+            raise Exception ("Vehicle connection could not be verified.")
     except Exception as e:
         print(f"Error verifying vehicle connection: {e}")
+        exit(1)
+
+    if (vehicle_connection == None):
+        print("Vehicle connection is None, exiting...")
         exit(1)
     
     uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)

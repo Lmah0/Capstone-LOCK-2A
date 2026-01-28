@@ -23,12 +23,11 @@ VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'vid
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
+flight_comp_url = "ws://10.13.22.103:5555/ws/flight-computer"
+
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
     global flight_comp_ws
-    flight_comp_url = os.getenv('FLIGHT_COMP_URL')
-    if not flight_comp_url:
-        raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
 
     while True:
         try:
@@ -118,7 +117,7 @@ async def follows_background_task():
                     print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
                 except Exception as e:
                     print(f"Failed to send follow command: {e}")
-        await asyncio.sleep(2)
+        await asyncio.sleep(2) # Send follows commands every 2 seconds for now
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -244,12 +243,14 @@ async def set_follow_distance(request: dict = Body(...)):
 async def set_flight_mode(request: dict = Body(...)):
     """Set the flight mode"""
     mode = request.get("mode")
+    print(f"Received frontend request to set flight mode: {mode}")
     if not mode:
         raise HTTPException(status_code=400, detail="Missing 'mode' in body")
     try:
         await send_to_flight_comp({"command": "set_flight_mode", "mode": mode})
         return {"status": 200, "message": f"Flight mode set to {mode}"}
     except Exception as e:
+        print("Sent request to change mode but failed at the flight computer.")
         raise HTTPException(status_code=500, detail=f"Failed to set flight mode: {str(e)}")
 
 @app.post("/stopFollowing")
