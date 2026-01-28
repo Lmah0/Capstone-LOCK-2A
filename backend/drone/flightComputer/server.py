@@ -133,6 +133,7 @@ def setFlightMode(mode: str):
     try:
         print(f"Setting flight mode to: {mode}")
     except Exception as e:
+        print(f"Failed to set flight mode: {e}")
         raise RuntimeError(f"Failed to set flight mode: {e}")
 
 
