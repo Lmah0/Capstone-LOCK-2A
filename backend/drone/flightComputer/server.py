@@ -103,6 +103,7 @@ def setFlightMode(mode: str):
         set_mode(vehicle_connection, mode)
         print(f"Setting flight mode to: {mode}")
     except Exception as e:
+        print(f"Failed to set flight mode: {e}")
         raise RuntimeError(f"Failed to set flight mode: {e}")
 
 def setFollowDistance(distance: float):
