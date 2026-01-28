@@ -14,8 +14,9 @@ test_telemetry = {
     "latitude": 123.4567,
     "longitude": -123.4567,
     "altitude": 150.0,
-    "speed": 25.5,
-    "heading": 90,
+    "dlat": 2.0, # Ground X speed (Latitude, positive north)
+    "dlon": 3.0, # Ground Y Speed (Longitude, positive east)
+    "dalt": 4.0, # Ground Z speed (Altitude, positive down)
     "roll": 2.5,
     "pitch": 1.5,
     "yaw": 0.5,
