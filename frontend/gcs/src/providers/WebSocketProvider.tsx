@@ -12,6 +12,7 @@ interface WebSocketContextType {
   setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
   isRecording: boolean;
   trackingData: any;
+  flightMode: Number;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -35,6 +36,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [droneConnection, setDroneConnection] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [trackingData, setTrackingData] = useState<any>({ tracking: false, tracked_class: null });
+  const [flightMode, setFlightMode] = useState<Number>(-1);
   const isRecordingRef = useRef<boolean>(false);
   const recordedDataRef = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
@@ -105,23 +107,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
             return;
           }
-          // // Update telemetry data
-          // setTelemetryData({ 
-          //     speed: data.speed,
-          //     altitude: data.altitude,
-          //     latitude: data.latitude,
-          //     longitude: data.longitude,
-          //     heading: data.heading,
-          //     roll: data.roll,
-          //     pitch: data.pitch,
-          //     yaw: data.yaw });
+          // Update telemetry data
+          setTelemetryData({ 
+              speed: Math.sqrt((data.dlat ** 2) + (data.dlon ** 2) + (data.dalt ** 2)),
+              altitude: data.altitude,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              roll: data.roll,
+              pitch: data.pitch,
+              yaw: data.yaw });
+
+          setFlightMode(data.flight_mode);
           
-          // if (data.battery_voltage && data.battery_remaining) {
-          //   setBatteryData({
-          //     percentage: data.battery_remaining,
-          //     usage: data.battery_voltage
-          //   });
-          // }
+          if (data.battery_voltage && data.battery_remaining) {
+            setBatteryData({
+              percentage: data.battery_remaining,
+              usage: data.battery_voltage
+            });
+          }
           
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);
@@ -194,7 +197,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     droneConnection,
     setIsRecording,
     isRecording,
-    trackingData
+    trackingData,
+    flightMode
   };
 
   return (

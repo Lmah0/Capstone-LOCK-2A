@@ -72,7 +72,24 @@ async def send_data_to_connections(message: dict):
 
 async def send_telemetry_data():
     while True:
-        await send_data_to_connections(vehicle_data)
+        # await send_data_to_connections(vehicle_data)
+        basic_telemetry = {
+            "timestamp": datetime.datetime.now().timestamp(),
+            "latitude": random.uniform(40.7123, 60.7133),
+            "longitude": random.uniform(-74.0065, -60.0055),
+            "altitude": random.uniform(145.0, 155.0),
+            "dlat": random.uniform(0.1, 5.0), # Ground X speed (Latitude, positive north)
+            "dlon": random.uniform(0.1, 5.0), # Ground Y Speed (Longitude, positive east)
+            "dalt": random.uniform(0.1, 5.0), # Ground Z speed (Altitude, positive down)
+            "heading": random.randint(0, 360),
+            "roll": random.uniform(-5.0, 5.0),
+            "pitch": random.uniform(-5.0, 5.0),
+            "yaw": random.uniform(-5.0, 5.0),
+            "flight_mode": -1,
+            "battery_remaining": random.uniform(30.0, 100.0), # not recieving from vehicle yet
+            "battery_voltage": random.uniform(10.1, 80.6)   # not recieving from vehicle yet
+        }
+        await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
 
 def setFlightMode(mode: str):
