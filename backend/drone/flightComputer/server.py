@@ -9,7 +9,7 @@ import random
 from contextlib import asynccontextmanager
 from typing import List
 import os
-from videoStreaming.SendVideoStream import start_video_streaming
+from videoStreaming.SendVideoStreamGst import start_video_streaming
 from dotenv import load_dotenv
 import datetime
 import threading
@@ -28,7 +28,7 @@ vehicle_connection = None
 vehicle_ip = "udp:127.0.0.1:5006"  # Need to run mavproxy module on 5006
 
 vehicle_data = {
-    "timestamp": -1.0,
+    "last_time": -1.0,
     "latitude": -1.0,
     "longitude": -1.0,
     "altitude": -1.0,
@@ -103,6 +103,23 @@ async def send_telemetry_data():
         }
         await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
+
+
+def return_telemetry_data():
+    basic_telemetry = {
+        "timestamp": datetime.datetime.now().timestamp(),
+        "latitude": random.uniform(40.7123, 60.7133),
+        "longitude": random.uniform(-74.0065, -60.0055),
+        "altitude": random.uniform(145.0, 155.0),
+        "speed": random.uniform(20.0, 30.0),
+        "heading": random.randint(0, 360),
+        "roll": random.uniform(-5.0, 5.0),
+        "pitch": random.uniform(-5.0, 5.0),
+        "yaw": random.uniform(-5.0, 5.0),
+        "battery_remaining": random.uniform(30.0, 100.0),
+        "battery_voltage": random.uniform(10.1, 80.6),
+    }
+    return basic_telemetry
 
 
 def setFlightMode(mode: str):
@@ -188,7 +205,9 @@ if __name__ == "__main__":
     # vehicle_connection = connect_to_vehicle()
     # print("Vehicle connection established.")
 
-    video_thread = threading.Thread(target=lambda: start_video_streaming(True), daemon=True)
+    video_thread = threading.Thread(
+        target=start_video_streaming, args=(return_telemetry_data,), daemon=True
+    )
     video_thread.start()
     print("Video streaming thread started")
     time.sleep(0.5)  # Give some time for the thread to start
