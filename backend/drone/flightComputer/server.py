@@ -199,7 +199,7 @@ def update_vehicle_position_from_flight_controller():
                 continue
             elif len(items) == len(basic_telemetry) - 2: # Exclude battery fields
                 basic_telemetry["last_time"] = message_time
-                for i, key in enumerate(list(basic_telemetry.keys())[1:], start=1):
+                for i, key in enumerate(list(basic_telemetry.keys())[1:-2], start=1):
                     basic_telemetry[key] = float(items[i])
             else:
                 print(f"Received data item does not match expected length...")
