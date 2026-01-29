@@ -4,12 +4,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from av import VideoFrame
 import uvicorn
+from contextlib import asynccontextmanager
+import traceback
 import asyncio
-import threading
 import numpy as np
 import time
 import os
 import cv2
+from shared_frame import attach_shared_frame, read_frame
 
 # Class obj used to match the return JSON from frontend
 # Offer/answer is the connection request - the video streaming begins when both sides agree
@@ -17,14 +19,39 @@ class RTCOffer(BaseModel):
     sdp: str #Text format that describes media session
     type: str # "offer" (from frontend) or "answer" (from backend)
 
-_output_frame_lock = threading.Lock()
 _peer_connections = set()
-_output_frame = None
+_shared_memory_attached = False
 
-_app = FastAPI()
+def try_attach_shared_memory():
+    """Try to attach to shared memory on first frame request"""
+    global _shared_memory_attached
+    if _shared_memory_attached:
+        return True
+    
+    try:
+        attach_shared_frame()
+        _shared_memory_attached = True
+        print("[WebRTC] Successfully attached to shared memory")
+        return True
+    except Exception as e:
+        return False
+
+    
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    print("[WebRTC] Shutting down peer connections...")
+    await asyncio.gather(
+        *[pc.close() for pc in list(_peer_connections)],
+        return_exceptions=True
+    )
+    _peer_connections.clear()
+
+
+_app = FastAPI(lifespan=lifespan)
 _app.add_middleware(
     CORSMiddleware,
-    allow_origins=[f"http://localhost:{os.getenv('GCS_FRONTEND_PORT')}"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,9 +78,13 @@ class AIVideoStreamTrack(VideoStreamTrack):
             # Pts = presentation timestamp which is the frame number
             pts, time_base = await self.next_timestamp()
 
-            frame = get_latest_ai_frame_for_stream()
+            # Try to attach on first frame
+            if not try_attach_shared_memory():
+                frame = None
+            else:
+                frame = read_frame()
 
-            if frame is None: # If no frame is avaliable send a black screen
+            if frame is None:  # If no frame available send a black screen
                 frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
             # Convert BGR (OpenCV format) to RGB (WebRTC format)
@@ -70,21 +101,8 @@ class AIVideoStreamTrack(VideoStreamTrack):
 
         except Exception as e:
             print(f"WebRTC recv ERROR: {e}")
+            traceback.print_exc()
             raise
-
-def get_latest_ai_frame_for_stream():
-    """Get the latest output frame that user pushed to stream"""
-    global _output_frame
-    with _output_frame_lock:
-        if _output_frame is None:
-            return None
-        return _output_frame.copy()
-
-def push_frame(frame: np.ndarray):
-    """Push a processed frame to be streamed via WebRTC"""
-    global _output_frame
-    with _output_frame_lock:
-        _output_frame = frame.copy()
 
 async def start_webrtc_server():
     """Start the WebRTC server as a background task"""
@@ -136,3 +154,7 @@ async def handle_offer(offer: RTCOffer):
         "sdp": pc.localDescription.sdp,
         "type": pc.localDescription.type
     }
+
+
+if __name__ == "__main__":
+    asyncio.run(start_webrtc_server())

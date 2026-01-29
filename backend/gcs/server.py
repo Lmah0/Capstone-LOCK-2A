@@ -13,7 +13,7 @@ import cv2
 import time
 from database import get_all_objects, delete_object, record_telemetry_data
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
-import webRTCStream
+from shared_frame import create_shared_frame, write_frame, cleanup
 from dotenv import load_dotenv
 from GeoLocate import calculate_distance
 
@@ -67,7 +67,7 @@ async def flight_computer_background_task():
             await asyncio.sleep(5)
 
 async def video_streaming_task():
-    """Background task that reads video, processes through AI, and streams via WebRTC"""
+    """Background task that reads video, processes through AI, and writes to frame buffer"""
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
         print(f"ERROR: Could not open video file: {VIDEO_PATH}")
@@ -94,9 +94,9 @@ async def video_streaming_task():
                 CURSOR_HANDLER.clear_click()
                 print("Click cleared")
         
-            # Send to WebRTC stream
+            # Write latest frame to buffer for WebRTC process
             if annotated_frame is not None:
-                webRTCStream.push_frame(annotated_frame)
+                write_frame(annotated_frame)
             
             # Maintain video FPS
             elapsed = time.time() - frame_start
@@ -116,25 +116,18 @@ async def video_streaming_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start background tasks
-    flight_comp_task = asyncio.create_task(flight_computer_background_task())
-    webrtc_task = asyncio.create_task(webRTCStream.start_webrtc_server())
-    video_task = asyncio.create_task(video_streaming_task())
-    
+    create_shared_frame()
+    print("[GCS] Shared memory attached")
+    tasks = [
+        asyncio.create_task(flight_computer_background_task()),
+        asyncio.create_task(video_streaming_task())
+    ]
     yield
-    
-    # Shutdown
-    flight_comp_task.cancel()
-    webrtc_task.cancel()
-    video_task.cancel()
-    try:
-        await asyncio.wait_for(
-            asyncio.gather(flight_comp_task, webrtc_task, video_task, return_exceptions=True), timeout=2.0
-        )
-    except asyncio.TimeoutError:
-        print("Warning: Some tasks did not shut down cleanly")
-    except asyncio.CancelledError:
-        pass
+
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    cleanup()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -289,4 +282,4 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=False)
