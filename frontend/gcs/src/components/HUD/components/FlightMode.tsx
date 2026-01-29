@@ -11,8 +11,7 @@ interface FlightModeProps {
 }
 
 export default function FlightMode({ isMetric, followDistance }: FlightModeProps) {
-    const { trackingData, flightMode, telemetryData } = useWebSocket();
-    const distanceToTarget = telemetryData?.distance_to_target;
+    const { trackingData, flightMode } = useWebSocket();
 
     return (
         <Paper
@@ -47,13 +46,11 @@ export default function FlightMode({ isMetric, followDistance }: FlightModeProps
                             {trackingData.tracked_class?.toUpperCase() || 'UNKNOWN'}
                         </Typography>
                     </Box>
-                    {distanceToTarget !== null && distanceToTarget !== undefined && (
-                        <Box className="flex items-center gap-1">
-                            <Typography id='dist-to-target' variant="body2" className="text-neutral-300">
-                                Target: {formatUnits.distance(distanceToTarget, isMetric)}
-                            </Typography>
-                        </Box>
-                    )}
+                    <Box className="flex items-center gap-1">
+                        <Typography id='dist-to-target' variant="body2" className="text-neutral-300">
+                            Target: {formatUnits.distance(trackingData.distance_to_target, isMetric)}
+                        </Typography>
+                    </Box>
                 </Box>
             ) : (
                 <Typography variant="body2" className="text-neutral-500">

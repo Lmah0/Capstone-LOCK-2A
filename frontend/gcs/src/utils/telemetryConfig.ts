@@ -2,7 +2,6 @@ import SpeedIcon from "@mui/icons-material/Speed";
 import FlightIcon from "@mui/icons-material/Flight";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import PublicIcon from "@mui/icons-material/Public";
-import ExploreIcon from "@mui/icons-material/Explore";
 import RotateRightIcon from "@mui/icons-material/RotateRight";
 import { SvgIconComponent } from "@mui/icons-material";
 
@@ -14,6 +13,12 @@ export interface TelemetryData {
   roll: number;
   pitch: number;
   yaw: number;
+}
+
+export interface trackingData {
+  tracking: boolean;
+  tracked_class: string | null;
+  distance_to_target: number | null;
 }
 
 export interface TelemetryItem {
