@@ -88,20 +88,19 @@ def start_video_streaming(telemetry_callback=None):
 
             klv_data = {
                 "frame_number": frame_count,
-                # "timestamp": capture_time,
+                "timestamp": capture_time,
             }
             klv_data.update(telemetry_data)
 
             # Encode JSON
             data_bytes = json.dumps(klv_data).encode("utf-8")
 
-            #  Wrap data in GStreamer Buffer
+            # Wrap data in GStreamer Buffer
             gst_buffer = Gst.Buffer.new_allocate(None, len(data_bytes), None)
             gst_buffer.fill(0, data_bytes)
 
-            #  Synchronization (Critical!)
-            # Set the PTS (Presentation Time Stamp) relative to when the pipeline started.
-            # Allows the receiver to align  packets with the video frames
+            # Synchronization (Critical!)
+            # Set the PTS (Presentation Time Stamp) allows the receiver to align  packets with the video frames
             current_pipeline_time = Gst.util_get_timestamp() - pipeline.get_base_time()
             gst_buffer.pts = current_pipeline_time
             gst_buffer.duration = Gst.util_uint64_scale_int(1, Gst.SECOND, FPS)

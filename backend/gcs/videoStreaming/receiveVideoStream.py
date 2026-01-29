@@ -41,7 +41,7 @@ def setup_video_stream(url):
         return None
 
 
-def yield_frames_with_timestamps(stream_url=STREAM_URL, timestamp_port=TIMESTAMP_PORT):
+def read(stream_url=STREAM_URL, timestamp_port=TIMESTAMP_PORT):
     """
     Generator that yields frames with timestamps
     Returns: (frame_array, timestamp_info_dict)
@@ -126,7 +126,7 @@ def video_telemetry_sync_task(
     print(f"Starting sync task on {stream_url}...")
     while not stop_event.is_set():
         try:
-            for frame, ts_info in yield_frames_with_timestamps(
+            for frame, ts_info in read(
                 stream_url, timestamp_port
             ):
                 if ts_info["wall_clock_time"] is None or frame is None:
@@ -174,7 +174,7 @@ def display_video_stream():
     print("Starting video display with timestamps...")
     print("Press 'q' to quit\n")
 
-    for frame, timestamp_info in yield_frames_with_timestamps():
+    for frame, timestamp_info in read():
         frame_display = frame.copy()
         frame_num = timestamp_info["frame_number"]
 
@@ -253,7 +253,7 @@ def benchmark_video_stream(duration=60):
     from benchmarking.benchmarkReceivingVideoStream import StreamBenchmark
 
     benchmark = StreamBenchmark()
-    stream = yield_frames_with_timestamps()
+    stream = read()
 
     print(f"Starting benchmark for {duration}s...\n")
 

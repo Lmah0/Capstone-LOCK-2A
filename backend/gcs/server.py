@@ -32,7 +32,7 @@ flight_comp_ws: WebSocket = None
 # Larger queue for video frames to handle bursts
 drone_frame_queue = queue.Queue()
 # Video stream configuration
-STREAM_URL = "udp://192.168.1.113:5000"  # Video from drone
+STREAM_URL = "udp://192.168.1.66:5000"  # Video from drone
 TIMESTAMP_PORT = 5001  # Timestamps from drone
 
 
@@ -68,7 +68,7 @@ async def flight_computer_background_task():
                             ]
                         else:
                             data["tracked_class"] = None
-                        print(data)
+                        print(f"Found DATA IT IS{data}")
                         # Forward to frontend
                         await send_data_to_connections(data)
                         print("Sent telemetry to frontend")

@@ -9,10 +9,10 @@ import threading
 import numpy as np
 from datetime import datetime
 
-# Add directory of this file to sys.path if needed
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
+# # Add directory of this file to sys.path if needed
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# if current_dir not in sys.path:
+#     sys.path.append(current_dir)
 
 # --- CONFIGURATION ---
 STREAM_URL = "udp://0.0.0.0:5000?overrun_nonfatal=1&fifo_size=500000"
@@ -40,7 +40,7 @@ class VideoStreamReceiver:
         if self.running:
             return
         self.running = True
-        self.thread = threading.Thread(target=self._update_loop, daemon=True)
+        self.thread = threading.Thread(target=self.update_loop, daemon=True)
         self.thread.start()
         print(f"Background thread started for {self.stream_url}")
 
@@ -49,7 +49,7 @@ class VideoStreamReceiver:
         if self.thread:
             self.thread.join()
 
-    def _update_loop(self):
+    def update_loop(self):
         """Background loop: Reads packets continuously."""
         print(f"Connecting to {self.stream_url}...")
         container = None
@@ -72,7 +72,7 @@ class VideoStreamReceiver:
                     container.streams.video[0].thread_type = (
                         "AUTO"  # Multi-threaded decode
                     )
-                    print("✓ Stream Connected.")
+                    print("Stream Connected.")
 
                 # Demux Packets
                 for packet in container.demux():
@@ -129,8 +129,8 @@ class VideoStreamReceiver:
             return self.latest_frame, self.latest_telemetry
 
 
-# --- DISPLAY FUNCTION ---
 def display_video_stream():
+    """Function to display the incoming video stream with telemetry overlay."""
     receiver = VideoStreamReceiver()
     receiver.start()
 
@@ -202,12 +202,11 @@ def display_video_stream():
         cv2.destroyAllWindows()
 
 
-# --- BENCHMARK LATENCY ---
 def benchmark_video_stream(duration=30):
+    """Function to bench mark the incoming video stream latency."""
     print(f"Benchmarking for {duration} seconds...")
     receiver = VideoStreamReceiver()
     receiver.start()
-    time.sleep(2)  # Warmup
 
     start_time = time.time()
     latencies = []
@@ -225,12 +224,12 @@ def benchmark_video_stream(duration=30):
 
             frames_counted += 1
             if frames_counted % 30 == 0:
-                # Artificial sleep to simulate AI load (to prove latency doesn't spike)
+                # Artificial sleep to simulate AI load
                 time.sleep(0.03)
                 current_avg = sum(latencies[-30:]) / 30 if latencies else 0
                 print(f"Sampled {frames_counted} | Current Avg: {current_avg:.1f}ms")
             else:
-                time.sleep(0.01)  # Normal poll rate
+                time.sleep(0.01)  #
 
     finally:
         receiver.stop()
@@ -244,13 +243,10 @@ def benchmark_video_stream(duration=30):
     print("=" * 40)
 
 
-# --- QUALITY RECORDING (Fixed for Windows/No-GStreamer) ---
 def record_incoming_stream(filename="received.mp4", duration=35):
-    """Saves the stream using FFmpeg subprocess (No GStreamer required)"""
+    """Saves the stream using FFmpeg subprocess for quality analysis later."""
     print(f"Recording to '{filename}' for {duration}s using FFmpeg...")
 
-    # Command to dump UDP stream to file
-    # -y (overwrite), -t (duration), -i (input), -c copy (save raw packets)
     cmd = [
         "ffmpeg",
         "-y",
@@ -273,7 +269,7 @@ def record_incoming_stream(filename="received.mp4", duration=35):
 
 
 def run_quality_metrics_wrapper(ref="reference.mp4", recv="received.mp4"):
-    """Wrapper to call your existing metrics script or commands"""
+    """Measures PSNR and SSIM between reference and received videos."""
     null_out = "NUL" if os.name == "nt" else "/dev/null"
 
     # Ensure received file exists
