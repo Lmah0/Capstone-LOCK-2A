@@ -23,7 +23,7 @@ VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'vid
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
-flight_comp_url = "ws://10.13.22.103:5555/ws/flight-computer"
+flight_comp_url = "ws://10.13.58.79:5555/ws/flight-computer"
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""

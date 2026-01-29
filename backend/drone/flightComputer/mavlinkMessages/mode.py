@@ -58,7 +58,9 @@ def set_mode(vehicle_connection, mode_string):
         msg = vehicle_connection.recv_match(
             type="COMMAND_ACK", blocking=True, timeout=5
         )
-        print(msg)
+        if msg["result"] != 0:
+            print("Error: Command sent to autopilot but was acknowledged with an error code.")
+            raise Exception("Autopilot couldn't ACK the mode change command.")
 
     except Exception as e:
         print(f"[ERROR] Failed to set mode: {e}")
