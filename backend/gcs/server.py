@@ -15,6 +15,7 @@ from database import get_all_objects, delete_object, record_telemetry_data
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
 import webRTCStream
 from dotenv import load_dotenv
+from GeoLocate import calculate_distance
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -43,6 +44,19 @@ async def flight_computer_background_task():
                             data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
                         else:
                             data["tracked_class"] = None
+                        
+                        # Calculate distance from drone to target if tracking
+                        if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
+                            drone_lat = data.get("latitude")
+                            drone_lon = data.get("longitude")
+                            if drone_lat is not None and drone_lon is not None:
+                                distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
+                                data["distance_to_target"] = distance_meters
+                            else:
+                                data["distance_to_target"] = None
+                        else:
+                            data["distance_to_target"] = None
+                        
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
                         continue
