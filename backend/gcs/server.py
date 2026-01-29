@@ -40,7 +40,7 @@ TIMESTAMP_PORT = 5001  # Timestamps from drone
 frame_telemetry_sync = FrameTelemetrySynchronizer()
 
 
-flight_comp_url = "ws://10.13.22.103:5555/ws/flight-computer"
+flight_comp_url = "ws://10.13.58.79:5555/ws/flight-computer"
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
@@ -216,6 +216,26 @@ async def follows_background_task():
                     print(f"Failed to send follow command: {e}")
         await asyncio.sleep(2) # Send follows commands every 2 seconds for now
 
+async def follows_background_task():
+    """Background task that manages following target logic"""
+    while True:
+        if STATE.tracking:
+            follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
+            if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
+                try:
+                    await send_to_flight_comp({
+                        "command": "move_to_location",
+                        "location": {
+                            "lat": STATE.last_target_lat,
+                            "lon": STATE.last_target_lon,
+                            "alt": follows_altitude
+                        }
+                    })
+                    print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
+                except Exception as e:
+                    print(f"Failed to send follow command: {e}")
+        await asyncio.sleep(2) # Send follows commands every 2 seconds for now
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start background tasks
@@ -223,7 +243,7 @@ async def lifespan(app: FastAPI):
     webrtc_task = asyncio.create_task(webRTCStream.start_webrtc_server())
     video_task = asyncio.create_task(video_streaming_task())
     follows_task = asyncio.create_task(follows_background_task())
-
+    
     yield
 
     # Shutdown
@@ -233,12 +253,10 @@ async def lifespan(app: FastAPI):
     follows_task.cancel()
 
     video_stop_event.set()
+
     try:
         await asyncio.wait_for(
-            asyncio.gather(
-                flight_comp_task, webrtc_task, video_task, follows_task, return_exceptions=True
-            ),
-            timeout=2.0,
+            asyncio.gather(flight_comp_task, webrtc_task, video_task, follows_task, return_exceptions=True), timeout=2.0
         )
     except asyncio.TimeoutError:
         print("Warning: Some tasks did not shut down cleanly")

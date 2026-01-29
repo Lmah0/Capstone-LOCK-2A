@@ -119,12 +119,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           setFlightMode(data.flight_mode);
           
-          // if (data.battery_voltage && data.battery_remaining) {
-          //   setBatteryData({
-          //     percentage: data.battery_remaining,
-          //     usage: data.battery_voltage
-          //   });
-          // }
+          if (data.battery_voltage && data.battery_remaining) {
+            setBatteryData({
+              percentage: data.battery_remaining,
+              usage: data.battery_voltage
+            });
+          }
           
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);

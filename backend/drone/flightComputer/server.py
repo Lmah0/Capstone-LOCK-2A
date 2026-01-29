@@ -27,20 +27,23 @@ vehicle_connection = None
 
 vehicle_ip = "udp:127.0.0.1:5006" # Need to run mavproxy module on 5006
 
-vehicle_data = {
-    "last_time": -1.0,
-    "latitude": -1.0,
-    "longitude": -1.0,
-    "rth_altitude": -1.0,
-    "dlat": -1.0, # Ground X speed (Latitude, positive north)
-    "dlon": -1.0, # Ground Y Speed (Longitude, positive east)
-    "dalt": -1.0, # Ground Z speed (Altitude, positive down)
-    "heading": -1.0,
-    "roll": -1.0,
-    "pitch": -1.0,
-    "yaw": -1.0,
+basic_telemetry = {
+    "last_time": None,
+    "latitude": None,
+    "longitude": None,
+    "rth_altitude": None,
+    "dlat": None,
+    "dlon": None,
+    "dalt": None,
+    "heading": None,
+    "roll": None,
+    "pitch": None,
+    "yaw": None,
     "flight_mode": -1,
+    "battery_remaining": None,
+    "battery_voltage": None
 }
+basic_telemetry_lock = threading.Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -97,25 +100,10 @@ async def send_data_to_connections(message: dict):
 
 
 async def send_telemetry_data():
+    global basic_telemetry
     while True:
-        # await send_data_to_connections(vehicle_data)
-        basic_telemetry = {
-            "timestamp": datetime.datetime.now().timestamp(),
-            "latitude": random.uniform(40.7123, 60.7133),
-            "longitude": random.uniform(-74.0065, -60.0055),
-            "altitude": random.uniform(145.0, 155.0),
-            "dlat": random.uniform(0.1, 5.0), # Ground X speed (Latitude, positive north)
-            "dlon": random.uniform(0.1, 5.0), # Ground Y Speed (Longitude, positive east)
-            "dalt": random.uniform(0.1, 5.0), # Ground Z speed (Altitude, positive down)
-            "heading": random.randint(0, 360),
-            "roll": random.uniform(-5.0, 5.0),
-            "pitch": random.uniform(-5.0, 5.0),
-            "yaw": random.uniform(-5.0, 5.0),
-            "flight_mode": -1,
-            "battery_remaining": random.uniform(30.0, 100.0), # not recieving from vehicle yet
-            "battery_voltage": random.uniform(10.1, 80.6)   # not recieving from vehicle yet
-        }
-        await send_data_to_connections(basic_telemetry)
+        with basic_telemetry_lock:
+            await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
 
 
@@ -218,23 +206,27 @@ async def websocket_endpoint(websocket: WebSocket):
 
 def update_vehicle_position_from_flight_controller():
     """Update vehicle position from flight controller data"""
+    global basic_telemetry
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("127.0.0.1", 5005))
-    
+
     while True:
         data = sock.recvfrom(1024)
         items = data[0].decode()[1:-1].split(",")
         message_time = float(items[0])
 
-        if message_time <= vehicle_data["last_time"]:
-            continue
-        elif len(items) == len(vehicle_data):
-            vehicle_data["last_time"] = message_time
-            for i, key in enumerate(list(vehicle_data.keys())[1:], start=1):
-                vehicle_data[key] = float(items[i])
-        else:
-            print(f"Received data item does not match expected length...")
+        with basic_telemetry_lock:
+            last_time = basic_telemetry.get("last_time")
+            if last_time is not None and message_time <= last_time:
+                continue
+            elif len(items) == len(basic_telemetry) - 2: # Exclude battery fields
+                basic_telemetry["last_time"] = message_time
+                for i, key in enumerate(list(basic_telemetry.keys())[1:-2], start=1):
+                    basic_telemetry[key] = float(items[i])
+            else:
+                print(f"Received data item does not match expected length...")
 
 if __name__ == "__main__":    
     uvicorn.run("server:app", host="0.0.0.0", port=5555, reload=True)
