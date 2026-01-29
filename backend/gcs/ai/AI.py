@@ -107,6 +107,8 @@ async def process_frame(frame, cursor_pos=None, click_pos=None):
                 obj_y_px = bbox_center_y - image_center_y
                 
                 target_lat, target_lon = locate(current_lat, current_lon, current_alt, heading, obj_x_px, obj_y_px)
+                STATE.target_latitude = target_lat
+                STATE.target_longitude = target_lon
                 print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
         
         # Return annotated frame or original if no annotation
