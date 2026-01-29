@@ -100,7 +100,6 @@ async def send_telemetry_data():
     global basic_telemetry
     while True:
         with basic_telemetry_lock:
-            print(basic_telemetry) # Temporary debug statement
             await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
 
