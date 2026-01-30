@@ -141,6 +141,10 @@ class ProcessingState:
         self.target_latitude = None
         self.target_longitude = None
         
+        # Last target geolocation
+        self.last_target_lat = None
+        self.last_target_lon = None
+
         # GPU optimization
         self.gpu_available = torch.cuda.is_available()
         
