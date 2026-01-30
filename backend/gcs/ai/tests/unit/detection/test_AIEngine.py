@@ -8,8 +8,10 @@ import numpy as np
 from unittest.mock import Mock, patch
 import sys
 import os
+from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../..'))
+root = Path(__file__).resolve().parents[6]
+sys.path.insert(0, str(root))
 from backend.gcs.ai.AIEngine import TrackingEngine, TrackingConfig, ProcessingState
 
 class TestTrackingEngine:

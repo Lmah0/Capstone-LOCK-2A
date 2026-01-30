@@ -27,7 +27,7 @@ jobs:
       - name: Run backend tests
         working-directory: ./backend/gcs
         run: |
-          python -m pytest tests/gcs_tests/test_endpoints.py -v --disable-warnings
+          python -m pytest tests/test_endpoints.py -v --disable-warnings
 
   GCS-UI-test:
     runs-on: ubuntu-latest
