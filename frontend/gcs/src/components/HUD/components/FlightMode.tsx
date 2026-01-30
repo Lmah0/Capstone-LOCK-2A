@@ -48,7 +48,7 @@ export default function FlightMode({ isMetric, followDistance }: FlightModeProps
                     </Box>
                     <Box className="flex items-center gap-1">
                         <Typography id='dist-to-target' variant="body2" className="text-neutral-300">
-                            Target: {formatUnits.distance(trackingData.distance_to_target, isMetric)}
+                            Target: {formatUnits.distance(trackingData?.distance_to_target, isMetric)}
                         </Typography>
                     </Box>
                 </Box>
