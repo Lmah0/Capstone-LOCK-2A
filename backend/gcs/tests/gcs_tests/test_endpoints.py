@@ -7,6 +7,9 @@ from httpx import ASGITransport
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 import mock_db # Mock database to avoid real DB calls. Simply tests the logic.
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 from server import app, send_data_to_connections
 
 test_telemetry = {
