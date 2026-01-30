@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
-import { TelemetryData } from '@/utils/telemetryConfig';
+import { TelemetryData, trackingData } from '@/utils/telemetryConfig';
 import axios from 'axios';
 
 interface WebSocketContextType {
@@ -35,7 +35,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [batteryData, setBatteryData] = useState<any>(null);
   const [droneConnection, setDroneConnection] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [trackingData, setTrackingData] = useState<any>({ tracking: false, tracked_class: null });
+  const [trackingData, setTrackingData] = useState<trackingData | null>(null);
   const [flightMode, setFlightMode] = useState<Number>(-1);
   const isRecordingRef = useRef<boolean>(false);
   const recordedDataRef = useRef<any[]>([]);
@@ -128,7 +128,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);
-          setTrackingData({ tracking: data.tracking, tracked_class: data.tracked_class })
+          setTrackingData({ tracking: data.tracking, tracked_class: data.tracked_class, distance_to_target: data.distance_to_target })
 
           // Reset drone connection timeout - if we don't receive data for 5 seconds, mark as disconnected
           if (droneTimeoutRef.current) {

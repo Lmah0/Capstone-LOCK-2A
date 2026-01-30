@@ -63,3 +63,21 @@ def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearin
     g = geod.Direct(uav_latitude, uav_longitude, azil, dist)
     (obj_latitude, obj_longitude) = (g['lat2'], g['lon2'])
     return (obj_latitude, obj_longitude)
+
+def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Calculate the geodesic distance between two GPS coordinates.
+    
+    Parameters:
+        lat1 - latitude of first point in degrees
+        lon1 - longitude of first point in degrees
+        lat2 - latitude of second point in degrees
+        lon2 - longitude of second point in degrees
+    
+    Returns:
+        distance in meters between the two points
+    """
+    geod = Geodesic.WGS84
+    # geodesic inverse calculation, returns several values, we need 's12' for distance
+    result = geod.Inverse(lat1, lon1, lat2, lon2) 
+    return result['s12']  # distance in meters

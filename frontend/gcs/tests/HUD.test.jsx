@@ -171,7 +171,7 @@ test('Check Follow Distance', () => {
     connectionStatus: 'disconnected', 
     droneConnection: false, 
     telemetryData: null,
-    trackingData: { tracking: true, tracked_class: 'person' },
+    trackingData: { tracking: true, tracked_class: 'person', distance_to_target: 19.8 },
     flightMode: 3
   });
   render(<HUD {...mockProps} />);

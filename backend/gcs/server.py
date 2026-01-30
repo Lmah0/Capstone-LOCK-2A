@@ -11,10 +11,12 @@ from typing import List
 import os
 import cv2
 import time
+import numpy as np
 from database import get_all_objects, delete_object, record_telemetry_data
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
-import webRTCStream
 from dotenv import load_dotenv
+from GeoLocate import calculate_distance
+from webrtc import webrtc_router, write_frame, get_peer_connections
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -42,6 +44,19 @@ async def flight_computer_background_task():
                             data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
                         else:
                             data["tracked_class"] = None
+                        
+                        # Calculate distance from drone to target if tracking
+                        if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
+                            drone_lat = data.get("latitude")
+                            drone_lon = data.get("longitude")
+                            if drone_lat is not None and drone_lon is not None:
+                                distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
+                                data["distance_to_target"] = distance_meters
+                            else:
+                                data["distance_to_target"] = None
+                        else:
+                            data["distance_to_target"] = None
+                        
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
                         continue
@@ -52,7 +67,7 @@ async def flight_computer_background_task():
             await asyncio.sleep(5)
 
 async def video_streaming_task():
-    """Background task that reads video, processes through AI, and streams via WebRTC"""
+    """Background task that reads video, processes through AI, and writes to frame buffer"""
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
         print(f"ERROR: Could not open video file: {VIDEO_PATH}")
@@ -79,9 +94,9 @@ async def video_streaming_task():
                 CURSOR_HANDLER.clear_click()
                 print("Click cleared")
         
-            # Send to WebRTC stream
+            # Write latest frame to buffer for WebRTC
             if annotated_frame is not None:
-                webRTCStream.push_frame(annotated_frame)
+                write_frame(annotated_frame)
             
             # Maintain video FPS
             elapsed = time.time() - frame_start
@@ -118,37 +133,35 @@ async def follows_background_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start background tasks
-    flight_comp_task = asyncio.create_task(flight_computer_background_task())
-    webrtc_task = asyncio.create_task(webRTCStream.start_webrtc_server())
-    video_task = asyncio.create_task(video_streaming_task())
-    follows_task = asyncio.create_task(follows_background_task())
-    
+    # Start background tasks    
+    print("[GCS] Starting background tasks...")
+    tasks = [asyncio.create_task(flight_computer_background_task()), asyncio.create_task(video_streaming_task()), asyncio.create_task(follows_background_task())]
     yield
-    
-    # Shutdown
-    flight_comp_task.cancel()
-    webrtc_task.cancel()
-    video_task.cancel()
-    follows_task.cancel()
 
-    try:
-        await asyncio.wait_for(
-            asyncio.gather(flight_comp_task, webrtc_task, video_task, follows_task, return_exceptions=True), timeout=2.0
-        )
-    except asyncio.TimeoutError:
-        print("Warning: Some tasks did not shut down cleanly")
-    except asyncio.CancelledError:
-        pass
+    print("[GCS] Shutting down...")
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Close WebRTC peer connections
+    peer_connections = get_peer_connections()
+    await asyncio.gather(
+        *[pc.close() for pc in list(peer_connections)],
+        return_exceptions=True
+    )
+    peer_connections.clear()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[f"http://localhost:{os.getenv('GCS_FRONTEND_PORT')}"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include WebRTC router
+app.include_router(webrtc_router)
 
 # -- Websocket communication --
 async def send_data_to_connections(message: dict, websockets_list: List[WebSocket] = active_connections):
@@ -296,4 +309,4 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=False)

@@ -138,6 +138,8 @@ class ProcessingState:
         self.last_detection_results = None
         self.last_tracker_bbox = None
         self.last_rendered_tracking_frame = None  # Cache rendered tracking frame
+        self.target_latitude = None
+        self.target_longitude = None
         
         # Last target geolocation
         self.last_target_lat = None
@@ -173,6 +175,8 @@ class ProcessingState:
         self.tracked_bbox = None
         self.last_tracker_bbox = None
         self.last_rendered_tracking_frame = None
+        self.target_latitude = None
+        self.target_longitude = None
     
     def start_tracking(self, frame, bbox, class_id):
         """Initialize tracking from a detection"""
