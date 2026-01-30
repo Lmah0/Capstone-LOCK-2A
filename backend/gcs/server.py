@@ -106,14 +106,11 @@ async def follows_background_task():
             follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
             if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
                 try:
-                    await send_to_flight_comp({
-                        "command": "move_to_location",
-                        "location": {
+                    await send_data_to_connections({"command": "move_to_location", "location": {
                             "lat": STATE.last_target_lat,
                             "lon": STATE.last_target_lon,
                             "alt": follows_altitude
-                        }
-                    })
+                        }}, flight_comp_ws)
                     print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
                 except Exception as e:
                     print(f"Failed to send follow command: {e}")
@@ -234,7 +231,7 @@ async def set_follow_distance(request: dict = Body(...)):
     if distance is None:
         raise HTTPException(status_code=400, detail="Missing 'distance' in body")
     try:
-        await send_to_flight_comp({"command": "set_follow_distance", "distance": distance})
+        await send_data_to_connections({"command": "set_follow_distance", "distance": distance}, flight_comp_ws)
         return {"status": 200, "message": f"Follow distance set to {distance} meters"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to set follow distance: {str(e)}")
@@ -247,7 +244,7 @@ async def set_flight_mode(request: dict = Body(...)):
     if not mode:
         raise HTTPException(status_code=400, detail="Missing 'mode' in body")
     try:
-        await send_to_flight_comp({"command": "set_flight_mode", "mode": mode})
+        await send_data_to_connections({"command": "set_flight_mode", "mode": mode}, flight_comp_ws)
         return {"status": 200, "message": f"Flight mode set to {mode}"}
     except Exception as e:
         print("Sent request to change mode but failed at the flight computer.")
@@ -258,7 +255,7 @@ async def stop_following():
     """Stop following the target"""
     try:
         STATE.reset_tracking()
-        await send_to_flight_comp({"command": "stop_following"}) # sets back to loiter
+        await send_data_to_connections({"command": "stop_following"}, flight_comp_ws)
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
