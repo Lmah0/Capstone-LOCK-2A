@@ -11,11 +11,12 @@ from typing import List
 import os
 import cv2
 import time
+import numpy as np
 from database import get_all_objects, delete_object, record_telemetry_data
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
-from shared_frame import create_shared_frame, write_frame, cleanup
 from dotenv import load_dotenv
 from GeoLocate import calculate_distance
+from webrtc import webrtc_router, write_frame, get_peer_connections
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -94,7 +95,7 @@ async def video_streaming_task():
                 CURSOR_HANDLER.clear_click()
                 print("Click cleared")
         
-            # Write latest frame to buffer for WebRTC process
+            # Write latest frame to buffer for WebRTC
             if annotated_frame is not None:
                 write_frame(annotated_frame)
             
@@ -116,27 +117,34 @@ async def video_streaming_task():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_shared_frame()
-    print("[GCS] Shared memory attached")
-    tasks = [
-        asyncio.create_task(flight_computer_background_task()),
-        asyncio.create_task(video_streaming_task())
-    ]
+    print("[GCS] Starting background tasks...")
+    tasks = [asyncio.create_task(flight_computer_background_task()), asyncio.create_task(video_streaming_task())]
     yield
 
+    print("[GCS] Shutting down...")
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
-    cleanup()
+    
+    # Close WebRTC peer connections
+    peer_connections = get_peer_connections()
+    await asyncio.gather(
+        *[pc.close() for pc in list(peer_connections)],
+        return_exceptions=True
+    )
+    peer_connections.clear()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[f"http://localhost:{os.getenv('GCS_FRONTEND_PORT')}"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include WebRTC router
+app.include_router(webrtc_router)
 
 # -- Websocket communication --
 async def send_data_to_connections(message: dict, websockets_list: List[WebSocket] = active_connections):

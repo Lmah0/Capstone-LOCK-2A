@@ -54,9 +54,7 @@ case "$1" in
     "gcs")
         echo "Starting GCS Backend..."
         cd "$PROJECT_ROOT/backend/gcs"
-        python server.py &
-        python webRTCStream.py &
-        wait
+        python server.py
         ;;
     "recording")
         echo "Starting RecordingAnalysis Backend..."
