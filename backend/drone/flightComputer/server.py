@@ -16,7 +16,11 @@ import threading
 import socket
 import time
 from mavlinkMessages.mode import set_mode
-from mavlinkMessages.connect import connect_to_vehicle, verify_connection
+import threading
+import socket
+import time
+from mavlinkMessages.mode import set_mode
+from mavlinkMessages.connect import connect_to_vehicle, verify_connection, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
 
 load_dotenv(dotenv_path="../../.env")
@@ -53,16 +57,10 @@ async def lifespan(app: FastAPI):
     flight_controller_thread.start()
     time.sleep(0.5) # Give some time for the thread to start
     
-    video_thread = threading.Thread(
-        target=start_video_streaming, args=(return_telemetry_data,), daemon=True
-    )
-    video_thread.start()
-    print("Video streaming thread started")
-    time.sleep(0.5)  # Give some time for the thread to start
-    
     print(f"Attempting to connect to vehicle on: {vehicle_ip}")
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
+
     try:
         is_connected = verify_connection(vehicle_connection)
         if is_connected:
@@ -75,7 +73,14 @@ async def lifespan(app: FastAPI):
 
     if (vehicle_connection is None):
         print("Vehicle connection is None, exiting...")
-        exit(1)
+        # exit(1)
+
+    video_thread = threading.Thread(
+        target=start_video_streaming, args=(return_telemetry_data,), daemon=True
+    )
+    video_thread.start()
+    print("Video streaming thread started")
+    time.sleep(0.5)  # Give some time for the thread to start
     
     # background_task = asyncio.create_task(send_telemetry_data())
     yield
@@ -143,6 +148,7 @@ def setFlightMode(mode: str):
     if vehicle_connection is None:
         raise RuntimeError("Vehicle connection is not established.")
     try:
+        set_mode(vehicle_connection, mode)
         print(f"Setting flight mode to: {mode}")
     except Exception as e:
         print(f"Failed to set flight mode: {e}")

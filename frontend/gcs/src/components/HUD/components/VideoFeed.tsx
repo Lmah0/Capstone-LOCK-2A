@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function VideoFeed() {
     const backendPort = process.env.REACT_APP_BACKEND_PORT || 8766;
-    const webrtcPort = process.env.REACT_APP_WEBRTC_PORT || 8767;
-    const webrtcUrl = `http://localhost:${webrtcPort}/offer`;
+    const webrtcUrl = `http://localhost:${backendPort}/offer`;
     const gcsServerUrl = `ws://localhost:${backendPort}/ws/gcs`;
 
     const [isWebRTCStreaming, setIsWebRTCStreaming] = useState(false);
