@@ -9,13 +9,8 @@ import threading
 import numpy as np
 from datetime import datetime
 
-# # Add directory of this file to sys.path if needed
-# current_dir = os.path.dirname(os.path.abspath(__file__))
-# if current_dir not in sys.path:
-#     sys.path.append(current_dir)
-
 # --- CONFIGURATION ---
-STREAM_URL = "udp://0.0.0.0:5000?overrun_nonfatal=1&fifo_size=500000"
+STREAM_URL = "udp://0.0.0.0:5000?overrun_nonfatal=1&fifo_size=10000"
 
 # Reduce log noise
 av.logging.set_level(av.logging.PANIC)
@@ -47,6 +42,7 @@ class VideoStreamReceiver:
     def stop(self):
         self.running = False
         if self.thread:
+            print("Stopping background thread...")
             self.thread.join()
 
     def update_loop(self):
@@ -61,12 +57,15 @@ class VideoStreamReceiver:
                     container = av.open(
                         self.stream_url,
                         options={
-                            "fflags": "nobuffer",
+                            "fflags": "nobuffer+discardcorrupt",
                             "flags": "low_delay",
+                            "flush_packets": "1",
                             "probesize": "32",
                             "analyzeduration": "0",
                             "reorder_queue_size": "0",
                             "max_delay": "0",  # Don't wait for packets
+                            "timeout": "2000000",    # For TCP/General
+                            "rw_timeout": "2000000"  # For UDP/RTSP usually
                         },
                     )
                     container.streams.video[0].thread_type = (
@@ -101,14 +100,19 @@ class VideoStreamReceiver:
 
                     # Handle Video
                     elif packet.stream.type == "video":
-                        for frame in packet.decode():
-                            img = frame.to_ndarray(format="bgr24")
-
-                            with self.lock:
-                                self.latest_frame = img
-
+                        try:
+                            for frame in packet.decode():
+                                img = frame.to_ndarray(format="bgr24")
+    
+                                with self.lock:
+                                    self.latest_frame = img
+                        except (av.FFmpegError, OSError, ValueError) as e:
+                            print(f"Video Decode Error: {e}. Continuing...")
+                            continue
+    
             except (av.FFmpegError, OSError) as e:
-                print(f"Stream Error: {e}. Retrying in 2s...")
+                # This outer block now only catches major network failures (like timeout)
+                print(f"Critical Stream Error: {e}. Retrying in 2s...")
                 if container:
                     container.close()
                     container = None
@@ -156,6 +160,8 @@ def display_video_stream():
             frame_num = ts_info.get("frame_number", "N/A")
             wall_time = ts_info.get("video_timestamp")
             latency = ts_info.get("latency_ms")
+            receive_time = ts_info.get("receive_time")
+
 
             # Display Text
             cv2.putText(
@@ -181,12 +187,25 @@ def display_video_stream():
                     2,
                 )
 
+            if receive_time:
+                dt = datetime.fromtimestamp(receive_time)
+                time_str = dt.strftime("%H:%M:%S.%f")[:-3]
+                cv2.putText(
+                    display_frame,
+                    f"GCS Time: {time_str}",
+                    (20, 105),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2,
+                )
+
             if latency is not None:
                 color = (0, 255, 0) if latency < 150 else (0, 0, 255)
                 cv2.putText(
                     display_frame,
                     f"Latency: {latency:.1f} ms",
-                    (20, 105),
+                    (20, 140),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
                     color,

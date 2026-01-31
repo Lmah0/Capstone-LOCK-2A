@@ -8,6 +8,8 @@ import struct
 import psutil
 import gi
 import json
+from dotenv import load_dotenv
+import os
 
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst, GLib
@@ -16,24 +18,29 @@ from gi.repository import Gst, GLib
 metrics = {"packet_count": 0, "total_bytes": 0, "start_time": 0}
 
 # --- Configuration ---
+script_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(script_dir, "../../../../.env")
+load_dotenv(dotenv_path=env_path)
 VIDEO_INPUT_DEVICE = "/dev/video0"
+
 GCS_IP = os.getenv(
-        "GCS_IP", "192.168.1.64")
+        "GCS_IP", "192.168.1.8")
 GCS_PORT = 5000
 FPS = 60
 
+current_telemetry_callback = None
+frame_count = 0
 
 def build_pipeline_string():
     """
     Constructs the GStreamer pipeline string.
-    Maps your previous PyAV/x264 settings to GStreamer elements.
     """
     return (
         # ---Define Video Output ---
         f"mpegtsmux name=mux alignment=7 ! "  # MPEG-TS with KLV alignment
         f"udpsink host={GCS_IP} port={GCS_PORT} sync=false "  # Send to GCS IP using UDP
         # --- Define Video Source ---
-        f"v4l2src device={VIDEO_INPUT_DEVICE} ! "  # Get video from dev/video0
+        f"v4l2src name=cam_src device={VIDEO_INPUT_DEVICE} ! "  # Get video from dev/video0
         f"video/x-raw,width=1280,height=720,framerate={FPS}/1 ! "  # Set resolution & framerate
         "videoconvert ! "  # Ensure format compatibility with encoder
         # --- Define Encoder ---
@@ -41,94 +48,90 @@ def build_pipeline_string():
         "tune=zerolatency "  # Disables buffering for low latency
         "speed-preset=ultrafast "  # Prioritize speed over compression and quality
         "bitrate=3000 "  # Set target bandwidth to 3000 kbps
-        "key-int-max=30 "  # Send keyframe every 60 frames
+        "sliced-threads=true "      # Low latency multithreading
+        "key-int-max=60 "  # Send keyframe every 30 frames
         "aud=true ! "  # Insert "Access Unit Delimiters" (helps the player find frame boundaries).
+        "h264parse config-interval=1 ! " # Parse H.264 stream, send headers (SPS/PPS) every second
         "mux. "
         # Define KLV Metadata Stream --
         "appsrc name=klv_src format=time is-live=true do-timestamp=true "  # Create empty input pipe to write binary data to
         'caps="meta/x-klv, parsed=true, sparse=true" ! mux.'  # Define metadata format as KLV for muxer
     )
 
+def video_frame_probe(pad, info, klv_src):
+    """
+    Triggered whenever a video frame passes the camera source.
+    """
+    global frame_count
+    
+    capture_time = time.time()
+    
+    # Get Data
+    telemetry_data = {}
+    if current_telemetry_callback:
+        try:
+            telemetry_data = current_telemetry_callback()
+        except Exception:
+            pass
+
+    # Build KLV Packet
+    klv_data = {
+        "frame_number": frame_count,
+        "video_timestamp": capture_time, 
+    }
+    klv_data.update(telemetry_data)
+    # Create GStreamer Buffer and add data
+    data_bytes = json.dumps(klv_data).encode("utf-8")
+    gst_buffer = Gst.Buffer.new_allocate(None, len(data_bytes), None)
+    gst_buffer.fill(0, data_bytes)
+
+    # Synchronize Timestamps
+    # Copy the timestamp from the VIDEO buffer to the METADATA buffer
+    # Aligns them perfectly in the Muxer 
+    video_pts = info.get_buffer().pts
+    gst_buffer.pts = video_pts
+    gst_buffer.duration = Gst.util_uint64_scale_int(1, Gst.SECOND, FPS)
+
+    # Push KLV data into klv_src
+    retval = klv_src.emit("push-buffer", gst_buffer)
+    
+    if frame_count % 60 == 0:
+        print(f"Frame {frame_count} | Sync Send OK")
+
+    frame_count += 1
+    return Gst.PadProbeReturn.OK
 
 def start_video_streaming(telemetry_callback=None):
-    print(f"Starting GStreamer broadcast to {GCS_IP}:{GCS_PORT}...")
+    global current_telemetry_callback
+    current_telemetry_callback = telemetry_callback
+    
+    print(f"Starting Event-Driven GStreamer broadcast to {GCS_IP}:{GCS_PORT}...")
 
-    # Init GStreamer
     Gst.init(None)
-    pipeline_str = build_pipeline_string()
-    pipeline = Gst.parse_launch(pipeline_str)
+    pipeline = Gst.parse_launch(build_pipeline_string())
 
-    # Get the handle to inject KLV data
-    klv_src = pipeline.get_by_name("klv_src")
-    if not klv_src:
-        print("Error: Could not find 'klv_src' in pipeline")
+    klv_src = pipeline.get_by_name("klv_src") # Get input pipe for metadata
+    cam_src = pipeline.get_by_name("cam_src") # Output port for camera
+    
+    if not klv_src or not cam_src:
+        print("Error: Could not find 'klv_src' or 'cam_src'")
         sys.exit(1)
 
-    # Start GStreamer Pipeline and start sending video
+    # Attach Probe to Video Source
+    src_pad = cam_src.get_static_pad("src")
+    src_pad.add_probe(Gst.PadProbeType.BUFFER, video_frame_probe, klv_src) # Trigger video_frame_probe every time a frame passes through cam_src
+
     pipeline.set_state(Gst.State.PLAYING)
 
-    frame_count = 0
-    start_time = time.time()
-
-    frame_target_duration = 1.0 / FPS
-
+    # Run MainLoop (Keeps script alive without eating CPU)
+    loop = GLib.MainLoop()
     try:
-        while True:
-            loop_start = time.time()
-
-            # --- KLV Packet ---
-            capture_time = time.time()
-            elapsed = capture_time - start_time
-
-            telemetry_data = {}
-            if telemetry_callback:
-                try:
-                    telemetry_data = telemetry_callback()
-                except Exception as e:
-                    print(f"Callback error: {e}")
-
-            klv_data = {
-                "frame_number": frame_count,
-                "video_timestamp": capture_time,
-            }
-            klv_data.update(telemetry_data)
-
-            # Encode JSON
-            data_bytes = json.dumps(klv_data).encode("utf-8")
-
-            # Wrap data in GStreamer Buffer
-            gst_buffer = Gst.Buffer.new_allocate(None, len(data_bytes), None)
-            gst_buffer.fill(0, data_bytes)
-
-            # Synchronization (Critical!)
-            # Set the PTS (Presentation Time Stamp) allows the receiver to align  packets with the video frames
-            current_pipeline_time = Gst.util_get_timestamp() - pipeline.get_base_time()
-            gst_buffer.pts = current_pipeline_time
-            gst_buffer.duration = Gst.util_uint64_scale_int(1, Gst.SECOND, FPS)
-
-            # Push buffer with metadata to Pipeline
-            retval = klv_src.emit("push-buffer", gst_buffer)
-            if retval != Gst.FlowReturn.OK:
-                print(f"Error pushing data: {retval}")
-                break
-
-            # Logging (Every 60 frames / 1 second)
-            if frame_count % 60 == 0:
-                print(f"Frame {frame_count} | Elapsed: {elapsed:.2f}s | Streaming OK")
-
-            frame_count += 1
-
-            # Precise loop timing to maintain ~60Hz
-            processing_time = time.time() - loop_start
-            sleep_time = max(0, frame_target_duration - processing_time)
-            time.sleep(sleep_time)
-
+        loop.run()
     except KeyboardInterrupt:
-        print("\nStreaming stopped by user.")
+        print("\nStreaming stopped.")
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        print("Shutting down pipeline...")
         pipeline.set_state(Gst.State.NULL)
 
 

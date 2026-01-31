@@ -14,7 +14,9 @@ from TimestampReceiver import TimestampReceiver
 from benchmarking.benchmarkReceivingVideoStream import run_quality_metrics
 import queue
 
-STREAM_URL = "udp://192.168.1.66:5000"
+# --- CONFIGURATION ---
+STREAM_URL = "udp://" + os.getenv(
+        "FLIGHT_COMP_IP", "192.168.") + ":5000"
 TIMESTAMP_PORT = 5001
 
 av.logging.set_level(av.logging.PANIC)

@@ -2,16 +2,22 @@ import subprocess
 import sys
 import av
 import time
+import os
 import json
 import socket
 from datetime import datetime
-from .benchmarking.benchmarkSendingVideoStream import benchmark_ffmpeg
-from .benchmarking.benchmarkSendingVideoStream import benchmark_video_quality
+# from .benchmarking.benchmarkSendingVideoStream import benchmark_ffmpeg
+# from .benchmarking.benchmarkSendingVideoStream import benchmark_video_quality
 from fractions import Fraction
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path="../../../../.env")
 
 VIDEO_INPUT_DEVICE = "/dev/video0"
-GCS_VIDEO_IP = "udp://192.168.1.82:5000"
-GCS_TIMESTAMP_IP = ("192.168.1.82", 5001)
+GCS_VIDEO_IP = "udp://" + os.getenv(
+        "GCS_IP", "192.168.") + ":5000"
+GCS_TIMESTAMP_IP = (os.getenv(
+        "GCS_IP", "192.168."), 5001)
 TIMESTAMP_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
@@ -127,9 +133,11 @@ if __name__ == "__main__":
     )
 
     if user_selection == "1":
-        benchmark_ffmpeg(setup_video_pipeline(), duration=60)
+        # benchmark_ffmpeg(setup_video_pipeline(), duration=60)
+        pass
     elif user_selection == "2":
-        benchmark_video_quality(duration=30)
+        # benchmark_video_quality(duration=30)
+        pass
     elif user_selection == "3":
         start_video_streaming(timestamps_enabled=False)
     else:

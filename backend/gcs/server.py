@@ -55,37 +55,34 @@ async def flight_computer_background_task():
             #     async for message in ws:
             #         try:
             #             data = json.loads(message)
-            await telemetry_event.wait()
-            telemetry_event.clear()
-            data = newest_telemetry.copy()
+            try:
+                await telemetry_event.wait()
+                telemetry_event.clear()
+                data = newest_telemetry.copy()
 
-            data["tracking"] = STATE.tracking  # Add tracking state
-            if STATE.tracked_class is not None and ENGINE.model is not None:
-                data["tracked_class"] = ENGINE.model.names[
-                    STATE.tracked_class
-                ]
-            else:
-                data["tracked_class"] = None
-            # Forward to frontend
-            print(f"SENDING TELEMETRY TO FRONTEND: {data}")
-                        
-            # Calculate distance from drone to target if tracking
-            if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
-                drone_lat = data.get("latitude")
-                drone_lon = data.get("longitude")
-                if drone_lat is not None and drone_lon is not None:
-                    distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
-                    data["distance_to_target"] = distance_meters
+                data["tracking"] = STATE.tracking  # Add tracking state
+                if STATE.tracked_class is not None and ENGINE.model is not None:
+                    data["tracked_class"] = ENGINE.model.names[
+                        STATE.tracked_class
+                    ]
+                else:
+                    data["tracked_class"] = None
+                # Calculate distance from drone to target if tracking
+                if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
+                    drone_lat = data.get("latitude")
+                    drone_lon = data.get("longitude")
+                    if drone_lat is not None and drone_lon is not None:
+                        distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
+                        data["distance_to_target"] = distance_meters
+                    else:
+                        data["distance_to_target"] = None
                 else:
                     data["distance_to_target"] = None
-            else:
-                data["distance_to_target"] = None
-                        
-            await send_data_to_connections(data)
-            # print("Sent telemetry to frontend")
-                    # except json.JSONDecodeError:
-                    #     continue
-            await asyncio.sleep(0.05)
+                            
+                await send_data_to_connections(data)
+                await asyncio.sleep(0.05)
+            except json.JSONDecodeError:
+                continue
         except Exception as e:
             print(f"Flight computer connection error: {e}, retrying in 5s")
             flight_comp_ws = None
@@ -169,7 +166,7 @@ async def video_streaming_task():
 
                 # Send to WebRTC
                 if annotated_frame is not None:
-                    webRTCStream.push_frame(annotated_frame)
+                    write_frame(annotated_frame)
 
             except Exception as e:
                 print(f"Error processing frame: {e}")
@@ -190,23 +187,7 @@ async def video_streaming_task():
         video_receiver.stop()
         if cap.isOpened():
             cap.release()
-
-async def follows_background_task():
-    """Background task that manages following target logic"""
-    while True:
-        if STATE.tracking:
-            follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
-            if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
-                try:
-                    await send_data_to_connections({"command": "move_to_location", "location": {
-                            "lat": STATE.last_target_lat,
-                            "lon": STATE.last_target_lon,
-                            "alt": follows_altitude
-                        }}, flight_comp_ws)
-                    print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
-                except Exception as e:
-                    print(f"Failed to send follow command: {e}")
-        await asyncio.sleep(2) # Send follows commands every 2 seconds for now
+    print("Video streaming task ended.")
 
 async def follows_background_task():
     """Background task that manages following target logic"""

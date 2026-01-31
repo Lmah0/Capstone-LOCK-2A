@@ -20,7 +20,7 @@ import threading
 import socket
 import time
 from mavlinkMessages.mode import set_mode
-from mavlinkMessages.connect import connect_to_vehicle, verify_connection, verify_connection
+from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
 
 load_dotenv(dotenv_path="../../.env")
@@ -61,19 +61,19 @@ async def lifespan(app: FastAPI):
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
 
-    try:
-        is_connected = verify_connection(vehicle_connection)
-        if is_connected:
-            print("Vehicle connection verified.")
-        else:
-            raise Exception ("Vehicle connection could not be verified.")
-    except Exception as e:
-        print(f"Error verifying vehicle connection: {e}")
-        exit(1)
+    # try:
+    #     is_connected = verify_connection(vehicle_connection)
+    #     if is_connected:
+    #         print("Vehicle connection verified.")
+    #     else:
+    #         raise Exception ("Vehicle connection could not be verified.")
+    # except Exception as e:
+    #     print(f"Error verifying vehicle connection: {e}")
+    #     exit(1)
 
-    if (vehicle_connection is None):
-        print("Vehicle connection is None, exiting...")
-        # exit(1)
+    # if (vehicle_connection is None):
+    #     print("Vehicle connection is None, exiting...")
+    #     # exit(1)
 
     video_thread = threading.Thread(
         target=start_video_streaming, args=(return_telemetry_data,), daemon=True
@@ -122,6 +122,7 @@ async def send_telemetry_data():
 def return_telemetry_data():
     global basic_telemetry
     with basic_telemetry_lock:
+        # DELETE THE FOLLOWING BEFORE PUSHING
         if basic_telemetry["last_time"] is None:
             basic_telemetry["last_time"] = datetime.datetime.now().timestamp()
             basic_telemetry["latitude"] = random.uniform(40.7123, 60.7133)
