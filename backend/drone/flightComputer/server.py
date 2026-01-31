@@ -53,6 +53,13 @@ async def lifespan(app: FastAPI):
     flight_controller_thread.start()
     time.sleep(0.5) # Give some time for the thread to start
     
+    video_thread = threading.Thread(
+        target=start_video_streaming, args=(return_telemetry_data,), daemon=True
+    )
+    video_thread.start()
+    print("Video streaming thread started")
+    time.sleep(0.5)  # Give some time for the thread to start
+    
     print(f"Attempting to connect to vehicle on: {vehicle_ip}")
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
@@ -70,15 +77,15 @@ async def lifespan(app: FastAPI):
         print("Vehicle connection is None, exiting...")
         exit(1)
     
-    background_task = asyncio.create_task(send_telemetry_data())
+    # background_task = asyncio.create_task(send_telemetry_data())
     yield
     # Shutdown
-    if background_task:
-        background_task.cancel()
-        try:
-            await background_task
-        except asyncio.CancelledError:
-            pass
+    # if background_task:
+    #     background_task.cancel()
+    #     try:
+    #         await background_task
+    #     except asyncio.CancelledError:
+    #         pass
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -108,23 +115,24 @@ async def send_telemetry_data():
 
 
 def return_telemetry_data():
-    basic_telemetry = {
-        "timestamp": datetime.datetime.now().timestamp(),
-        "latitude": random.uniform(40.7123, 60.7133),
-        "longitude": random.uniform(-74.0065, -60.0055),
-        "altitude": random.uniform(145.0, 155.0),
-        "dlat": random.uniform(0.1, 5.0), # Ground X speed (Latitude, positive north)
-        "dlon": random.uniform(0.1, 5.0), # Ground Y Speed (Longitude, positive east)
-        "dalt": random.uniform(0.1, 5.0), # Ground Z speed (Altitude, positive down)
-        "heading": random.randint(0, 360),
-        "roll": random.uniform(-5.0, 5.0),
-        "pitch": random.uniform(-5.0, 5.0),
-        "yaw": random.uniform(-5.0, 5.0),
-        "flight_mode": -1,
-        "battery_remaining": random.uniform(30.0, 100.0), # not recieving from vehicle yet
-        "battery_voltage": random.uniform(10.1, 80.6)   # not recieving from vehicle yet
-    }
-    return basic_telemetry
+    global basic_telemetry
+    with basic_telemetry_lock:
+        if basic_telemetry["last_time"] is None:
+            basic_telemetry["last_time"] = datetime.datetime.now().timestamp()
+            basic_telemetry["latitude"] = random.uniform(40.7123, 60.7133)
+            basic_telemetry["longitude"] = random.uniform(-74.0065, -60.0055)
+            basic_telemetry["rth_altitude"] = random.uniform(145.0, 155.0)
+            basic_telemetry["dlat"] = random.uniform(-50, 50)
+            basic_telemetry["dlon"] = random.uniform(-50, 50)
+            basic_telemetry["dalt"] = random.uniform(-50, 50)
+            basic_telemetry["heading"] = random.randint(0, 360)
+            basic_telemetry["roll"] =  random.uniform(-5.0, 5.0)
+            basic_telemetry["pitch"] =  random.uniform(-5.0, 5.0)
+            basic_telemetry["yaw"] =  random.uniform(-5.0, 5.0)
+            basic_telemetry["flight_mode"] =  -1
+            basic_telemetry["battery_remaining"] =  random.uniform(30.0, 100.0)
+            basic_telemetry["battery_voltage"] =  random.uniform(10.1, 80.6)
+    return basic_telemetry.copy()
 
 
 def setFlightMode(mode: str):

@@ -88,9 +88,9 @@ class VideoStreamReceiver:
 
                             # Calculate Latency immediately upon arrival
                             meta["receive_time"] = time.time()
-                            if meta.get("timestamp"):
+                            if meta.get("video_timestamp"):
                                 meta["latency_ms"] = (
-                                    meta["receive_time"] - meta["timestamp"]
+                                    meta["receive_time"] - meta["video_timestamp"]
                                 ) * 1000
 
                             with self.lock:
@@ -154,7 +154,7 @@ def display_video_stream():
 
             # --- Extract Data ---
             frame_num = ts_info.get("frame_number", "N/A")
-            wall_time = ts_info.get("timestamp")
+            wall_time = ts_info.get("video_timestamp")
             latency = ts_info.get("latency_ms")
 
             # Display Text

@@ -5,10 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import json
-import websockets
 import traceback
 from contextlib import asynccontextmanager
-from typing import List, Dict, Optional
+from typing import List
 import os
 import cv2
 import time
@@ -17,9 +16,7 @@ import time
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
 import webRTCStream
 from dotenv import load_dotenv
-from videoStreaming.FrameTelemetrySynchronizer import FrameTelemetrySynchronizer
 from videoStreaming.receiveVideoStreamGst import VideoStreamReceiver
-import queue
 import threading
 
 load_dotenv(dotenv_path="../../.env")
@@ -29,53 +26,47 @@ VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai", "vid
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
-# Larger queue for video frames to handle bursts
-drone_frame_queue = queue.Queue()
 # Video stream configuration
-STREAM_URL = "udp://192.168.1.66:5000"  # Video from drone
+STREAM_URL = "udp://"+ os.getenv(
+        "FLIGHT_COMP_IP", "192.168.1.66")+":5000"  # Video from drone
 TIMESTAMP_PORT = 5001  # Timestamps from drone
 
-
-# Global synchronizer for frames and telemetry
-frame_telemetry_sync = FrameTelemetrySynchronizer()
-
-
-flight_comp_url = "ws://10.13.58.79:5555/ws/flight-computer"
+newest_telemetry = {}
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
     global flight_comp_ws
+    global newest_telemetry
     print("Starting flight computer background task...")
-    flight_comp_url = os.getenv(
-        "FLIGHT_COMP_URL", "ws://192.168.1.113:5555/ws/flight-computer"
-    )
+    flight_comp_url = "ws://"+ os.getenv(
+        "FLIGHT_COMP_IP", "192.168.1.66:5555"
+    ) + "/ws/flight-computer"
     if not flight_comp_url:
         raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
-
     while True:
         try:
-            async with websockets.connect(flight_comp_url) as ws:
-                flight_comp_ws = ws
-                print("Connected to flight computer")
-                async for message in ws:
-                    try:
-                        data = json.loads(message)
+            # async with websockets.connect(flight_comp_url) as ws:
+            #     flight_comp_ws = ws
+            #     print("Connected to flight computer")
+            #     async for message in ws:
+            #         try:
+            #             data = json.loads(message)
+            data = newest_telemetry.copy()
 
-                        data["tracking"] = STATE.tracking  # Add tracking state
-                        if STATE.tracked_class is not None and ENGINE.model is not None:
-                            data["tracked_class"] = ENGINE.model.names[
-                                STATE.tracked_class
-                            ]
-                        else:
-                            data["tracked_class"] = None
-                        print(f"Found DATA IT IS{data}")
-                        # Forward to frontend
-                        await send_data_to_connections(data)
-                        print("Sent telemetry to frontend")
-
-                    except json.JSONDecodeError:
-                        continue
-
+            data["tracking"] = STATE.tracking  # Add tracking state
+            if STATE.tracked_class is not None and ENGINE.model is not None:
+                data["tracked_class"] = ENGINE.model.names[
+                    STATE.tracked_class
+                ]
+            else:
+                data["tracked_class"] = None
+            # Forward to frontend
+            print(f"SENDING TELEMETRY TO FRONTEND: {data}")
+            await send_data_to_connections(data)
+            # print("Sent telemetry to frontend")
+                    # except json.JSONDecodeError:
+                    #     continue
+            await asyncio.sleep(0.05)
         except Exception as e:
             print(f"Flight computer connection error: {e}, retrying in 5s")
             flight_comp_ws = None
@@ -89,6 +80,7 @@ video_receiver = VideoStreamReceiver(STREAM_URL)  # Instantiate the class
 async def video_streaming_task():
     """Background task that reads video, processes through AI, and streams via WebRTC"""
     print("Starting receive video stream background task...")
+    global newest_telemetry
     # Start Live Receiver
     video_receiver.start()
     # Target 60 FPS for the loop
@@ -120,23 +112,28 @@ async def video_streaming_task():
                         frame = file_frame
                         # Inject dummy metadata
                         metadata = {
-                            "timestamp": -1,
-                            "latitude": -1,
-                            "longitude": -1,
-                            "altitude": -1,
-                            "speed": -1,
-                            "heading": -1,
-                            "roll": -1,
-                            "pitch": -1,
-                            "yaw": -1,
-                            "battery_remaining": -1,
-                            "battery_voltage": -1,
+                                "last_time": -1,
+                                "latitude":-1,
+                                "longitude":-1,
+                                "rth_altitude":-1,
+                                "dlat":-1,
+                                "dlon":-1,
+                                "dalt":-1,
+                                "heading":-1,
+                                "roll":-1,
+                                "pitch":-1,
+                                "yaw":-1,
+                                "flight_mode":-1,
+                                "battery_remaining":-1,
+                                "battery_voltage":-1,
                         }
 
             # --- If live video and mock both fail then sleep and retry ---
             if frame is None:
                 await asyncio.sleep(0.1)
-                continue
+            
+            
+            newest_telemetry = metadata # Update newest telemetry for flight computer task
 
             # --- D. AI Processing (Common for both sources) ---
             try:
@@ -175,46 +172,6 @@ async def video_streaming_task():
         if cap.isOpened():
             cap.release()
 
-
-async def follows_background_task():
-    """Background task that manages following target logic"""
-    while True:
-        if STATE.tracking:
-            follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
-            if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
-                try:
-                    await send_to_flight_comp({
-                        "command": "move_to_location",
-                        "location": {
-                            "lat": STATE.last_target_lat,
-                            "lon": STATE.last_target_lon,
-                            "alt": follows_altitude
-                        }
-                    })
-                    print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
-                except Exception as e:
-                    print(f"Failed to send follow command: {e}")
-        await asyncio.sleep(2) # Send follows commands every 2 seconds for now
-
-async def follows_background_task():
-    """Background task that manages following target logic"""
-    while True:
-        if STATE.tracking:
-            follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
-            if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
-                try:
-                    await send_to_flight_comp({
-                        "command": "move_to_location",
-                        "location": {
-                            "lat": STATE.last_target_lat,
-                            "lon": STATE.last_target_lon,
-                            "alt": follows_altitude
-                        }
-                    })
-                    print(f"Sent follow command to flight computer: lat {STATE.last_target_lat}, lon {STATE.last_target_lon}, alt {follows_altitude}")
-                except Exception as e:
-                    print(f"Failed to send follow command: {e}")
-        await asyncio.sleep(2) # Send follows commands every 2 seconds for now
 
 async def follows_background_task():
     """Background task that manages following target logic"""

@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 import os
 import random
 import sys
@@ -17,7 +17,8 @@ metrics = {"packet_count": 0, "total_bytes": 0, "start_time": 0}
 
 # --- Configuration ---
 VIDEO_INPUT_DEVICE = "/dev/video0"
-GCS_IP = "192.168.1.82"
+GCS_IP = os.getenv(
+        "GCS_IP", "192.168.1.64")
 GCS_PORT = 5000
 FPS = 60
 
@@ -88,7 +89,7 @@ def start_video_streaming(telemetry_callback=None):
 
             klv_data = {
                 "frame_number": frame_count,
-                "timestamp": capture_time,
+                "video_timestamp": capture_time,
             }
             klv_data.update(telemetry_data)
 
@@ -194,7 +195,7 @@ def benchmark_gstreamer(duration=60):
                 break
 
             # --- Inject Dummy Metadata (Required to keep pipeline healthy) ---
-            # Even though this is a benchmark, we must feed the 'appsrc' or it might stall
+            # Even though this is a benchmark, feed the 'appsrc' or it might stall
             data = json.dumps({"ts": loop_start}).encode("utf-8")
             buf = Gst.Buffer.new_allocate(None, len(data), None)
             buf.fill(0, data)
@@ -301,10 +302,9 @@ def stream_reference_file(filename="reference.mp4"):
         f"filesrc location={filename} ! "
         "qtdemux ! h264parse ! avdec_h264 ! "  # Decode reference
         "videoconvert ! "
-        # --- FLIGHT SETTINGS (Must match start_video_streaming) ---
         "x264enc tune=zerolatency speed-preset=ultrafast bitrate=3000 key-int-max=60 aud=true ! "
         "mpegtsmux alignment=7 ! "
-        f"udpsink host={GCS_IP} port={GCS_PORT} sync=true"  # sync=true important for file playback!
+        f"udpsink host={GCS_IP} port={GCS_PORT} sync=true"  # sync=true for file playback
     )
 
     pipeline = Gst.parse_launch(pipeline_str)
@@ -323,19 +323,21 @@ def stream_reference_file(filename="reference.mp4"):
 def get_mock_telemetry():
     """Simulates a drone flying in a circle."""
     return {
-        "timestamp": datetime.datetime.now().timestamp(),
+        "last_time": datetime.datetime.now().timestamp(),
         "latitude": random.uniform(40.7123, 60.7133),
         "longitude": random.uniform(-74.0065, -60.0055),
-        "altitude": random.uniform(145.0, 155.0),
-        "speed": random.uniform(20.0, 30.0),
+        "rth_altitude": random.uniform(145.0, 155.0),
+        "dlat": random.uniform(0.1, 5.0), # Ground X speed (Latitude, positive north)
+        "dlon": random.uniform(0.1, 5.0), # Ground Y Speed (Longitude, positive east)
+        "dalt": random.uniform(0.1, 5.0), # Ground Z speed (Altitude, positive down)
         "heading": random.randint(0, 360),
         "roll": random.uniform(-5.0, 5.0),
         "pitch": random.uniform(-5.0, 5.0),
         "yaw": random.uniform(-5.0, 5.0),
-        "battery_remaining": random.uniform(30.0, 100.0),
-        "battery_voltage": random.uniform(10.1, 80.6),
+        "flight_mode": -1,
+        "battery_remaining": random.uniform(30.0, 100.0), # not receiving from vehicle yet
+        "battery_voltage": random.uniform(10.1, 80.6)   # not receiving from vehicle yet
     }
-
 
 if __name__ == "__main__":
     user_input = input(
