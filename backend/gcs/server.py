@@ -33,6 +33,8 @@ TIMESTAMP_PORT = 5001  # Timestamps from drone
 
 newest_telemetry = {}
 
+telemetry_event = asyncio.Event()
+
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
     global flight_comp_ws
@@ -51,6 +53,8 @@ async def flight_computer_background_task():
             #     async for message in ws:
             #         try:
             #             data = json.loads(message)
+            await telemetry_event.wait()
+            telemetry_event.clear()
             data = newest_telemetry.copy()
 
             data["tracking"] = STATE.tracking  # Add tracking state
@@ -132,8 +136,8 @@ async def video_streaming_task():
             if frame is None:
                 await asyncio.sleep(0.1)
             
-            
             newest_telemetry = metadata # Update newest telemetry for flight computer task
+            telemetry_event.set() # Notify flight computer task new telemetry is available
 
             # --- D. AI Processing (Common for both sources) ---
             try:
