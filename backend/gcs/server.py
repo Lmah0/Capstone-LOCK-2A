@@ -12,13 +12,12 @@ import os
 import cv2
 import time
 import numpy as np
-
-# from database import get_all_objects, delete_object, record_telemetry_data
+from database import get_all_objects, delete_object, record_telemetry_data
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
 from dotenv import load_dotenv
 from GeoLocate import calculate_distance
 from webrtc import webrtc_router, write_frame, get_peer_connections
-from videoStreaming.receiveVideoStreamGst import VideoStreamReceiver
+from receiveVideoStream import VideoStreamReceiver
 import threading
 
 load_dotenv(dotenv_path="../../.env")
@@ -42,55 +41,39 @@ async def flight_computer_background_task():
     global flight_comp_ws
     global newest_telemetry
     print("Starting flight computer background task...")
-    flight_comp_url = "ws://"+ os.getenv(
-        "FLIGHT_COMP_IP", "192.168.1.66:5555"
-    ) + "/ws/flight-computer"
-    if not flight_comp_url:
-        raise RuntimeError("FLIGHT_COMP_URL not set in environment variables")
     while True:
         try:
-            # async with websockets.connect(flight_comp_url) as ws:
-            #     flight_comp_ws = ws
-            #     print("Connected to flight computer")
-            #     async for message in ws:
-            #         try:
-            #             data = json.loads(message)
-            try:
-                await telemetry_event.wait()
-                telemetry_event.clear()
-                data = newest_telemetry.copy()
+            await telemetry_event.wait()
+            telemetry_event.clear()
+            data = newest_telemetry.copy()
 
-                data["tracking"] = STATE.tracking  # Add tracking state
-                if STATE.tracked_class is not None and ENGINE.model is not None:
-                    data["tracked_class"] = ENGINE.model.names[
-                        STATE.tracked_class
-                    ]
-                else:
-                    data["tracked_class"] = None
-                # Calculate distance from drone to target if tracking
-                if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
-                    drone_lat = data.get("latitude")
-                    drone_lon = data.get("longitude")
-                    if drone_lat is not None and drone_lon is not None:
-                        distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
-                        data["distance_to_target"] = distance_meters
-                    else:
-                        data["distance_to_target"] = None
+            data["tracking"] = STATE.tracking  # Add tracking state
+            if STATE.tracked_class is not None and ENGINE.model is not None:
+                data["tracked_class"] = ENGINE.model.names[
+                    STATE.tracked_class
+                ]
+            else:
+                data["tracked_class"] = None
+            # Calculate distance from drone to target if tracking
+            if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
+                drone_lat = data.get("latitude")
+                drone_lon = data.get("longitude")
+                if drone_lat is not None and drone_lon is not None:
+                    distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
+                    data["distance_to_target"] = distance_meters
                 else:
                     data["distance_to_target"] = None
-                            
-                await send_data_to_connections(data)
-                await asyncio.sleep(0.05)
-            except json.JSONDecodeError:
-                continue
-        except Exception as e:
-            print(f"Flight computer connection error: {e}, retrying in 5s")
-            flight_comp_ws = None
-            await asyncio.sleep(5)
+            else:
+                data["distance_to_target"] = None
+                        
+            await send_data_to_connections(data)
+            await asyncio.sleep(0.05)
+        except json.JSONDecodeError:
+            continue
 
 
 video_stop_event = threading.Event()
-video_receiver = VideoStreamReceiver(STREAM_URL)  # Instantiate the class
+video_receiver = VideoStreamReceiver(STREAM_URL)
 
 
 async def video_streaming_task():
@@ -149,7 +132,7 @@ async def video_streaming_task():
                 await asyncio.sleep(0.1)
             
             newest_telemetry = metadata # Update newest telemetry for flight computer task
-            telemetry_event.set() # Notify flight computer task new telemetry is available
+            telemetry_event.set() # Notify flight_computer_background_task new telemetry is available
 
             # --- D. AI Processing (Common for both sources) ---
             try:
@@ -267,56 +250,56 @@ async def send_to_flight_comp(message: dict):
         flight_comp_ws = None
         raise
 
-    # # -- Database Endpoints --
-    # @app.get("/objects")
-    # def get_all_objects_endpoint():
-    #     """Retrieve a list of all recorded objects with their classifications and timestamps"""
-    #     try:
-    #         return get_all_objects()
-    #     except Exception as e:
-    #         raise HTTPException(
-    #             status_code=500, detail=f"Failed to retrieve objects: {str(e)}"
-    #         )
+# -- Database Endpoints --
+@app.get("/objects")
+def get_all_objects_endpoint():
+    """Retrieve a list of all recorded objects with their classifications and timestamps"""
+    try:
+        return get_all_objects()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve objects: {str(e)}"
+        )
 
-    # @app.delete("/delete/object/{object_id}")
-    # def delete_object_endpoint(object_id: str):
-    #     """Delete a recorded object from the DynamoDB table by its ID"""
-    #     try:
-    #         success = delete_object(object_id)
-    #         if success:
-    #             return {"status": 200}
-    #         else:
-    #             raise HTTPException(status_code=500, detail="Failed to delete object")
-    #     except Exception:
-    #         raise HTTPException(status_code=500, detail=f"Failed to delete object")
+@app.delete("/delete/object/{object_id}")
+def delete_object_endpoint(object_id: str):
+    """Delete a recorded object from the DynamoDB table by its ID"""
+    try:
+        success = delete_object(object_id)
+        if success:
+            return {"status": 200}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete object")
+    except Exception:
+        raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
-    # @app.post("/record")
-    # async def record(request: dict = Body(...)):
-    #     """Record tracked object data"""
-    #     data = request.get("data")
-    #     if not data:
-    #         raise HTTPException(status_code=400, detail="Missing 'data'")
+@app.post("/record")
+async def record(request: dict = Body(...)):
+    """Record tracked object data"""
+    data = request.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="Missing 'data'")
 
-    # required_fields = ("timestamp", "latitude", "longitude")
-    # # Validate point data
-    # for idx, point in enumerate(data):
-    #     missing = [f for f in required_fields if point.get(f) is None]
-    #     if missing:
-    #         raise HTTPException(
-    #             status_code=400,
-    #             detail=f"Missing fields {missing} in data point at index {idx}",
-    #         )
+    required_fields = ("timestamp", "latitude", "longitude")
+    # Validate point data
+    for idx, point in enumerate(data):
+        missing = [f for f in required_fields if point.get(f) is None]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing fields {missing} in data point at index {idx}",
+            )
 
-    # try:
-    #     # Get classification name if tracking, otherwise use "unknown"
-    #     classification = "unknown"
-    #     if STATE.tracked_class is not None:
-    #         classification = ENGINE.model.names[STATE.tracked_class]
+    try:
+        # Get classification name if tracking, otherwise use "unknown"
+        classification = "unknown"
+        if STATE.tracked_class is not None:
+            classification = ENGINE.model.names[STATE.tracked_class]
 
-    #     record_telemetry_data(data, classification=classification)
-    #     return {"status": 200, "message": "Data recorded successfully"}
-    # except Exception as e:
-    #     raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
+        record_telemetry_data(data, classification=classification)
+        return {"status": 200, "message": "Data recorded successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
 
 
 # -- Flight Computer Communication Endpoints --

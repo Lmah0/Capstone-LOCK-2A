@@ -9,7 +9,7 @@ import random
 from contextlib import asynccontextmanager
 from typing import List
 import os
-from videoStreaming.SendVideoStreamGst import start_video_streaming
+from SendVideoStream import start_streaming_video_and_telemetry
 from dotenv import load_dotenv
 import datetime
 import threading
@@ -61,36 +61,28 @@ async def lifespan(app: FastAPI):
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
 
-    # try:
-    #     is_connected = verify_connection(vehicle_connection)
-    #     if is_connected:
-    #         print("Vehicle connection verified.")
-    #     else:
-    #         raise Exception ("Vehicle connection could not be verified.")
-    # except Exception as e:
-    #     print(f"Error verifying vehicle connection: {e}")
-    #     exit(1)
+    try:
+        is_connected = verify_connection(vehicle_connection)
+        if is_connected:
+            print("Vehicle connection verified.")
+        else:
+            raise Exception ("Vehicle connection could not be verified.")
+    except Exception as e:
+        print(f"Error verifying vehicle connection: {e}")
+        exit(1)
 
-    # if (vehicle_connection is None):
-    #     print("Vehicle connection is None, exiting...")
-    #     # exit(1)
+    if (vehicle_connection is None):
+        print("Vehicle connection is None, exiting...")
+        # exit(1)
 
-    video_thread = threading.Thread(
-        target=start_video_streaming, args=(return_telemetry_data,), daemon=True
+    video_and_telemetry_thread = threading.Thread(
+        target=start_streaming_video_and_telemetry, args=(return_telemetry_data,), daemon=True
     )
-    video_thread.start()
+    video_and_telemetry_thread.start()
     print("Video streaming thread started")
     time.sleep(0.5)  # Give some time for the thread to start
     
-    # background_task = asyncio.create_task(send_telemetry_data())
     yield
-    # Shutdown
-    # if background_task:
-    #     background_task.cancel()
-    #     try:
-    #         await background_task
-    #     except asyncio.CancelledError:
-    #         pass
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -122,23 +114,7 @@ async def send_telemetry_data():
 def return_telemetry_data():
     global basic_telemetry
     with basic_telemetry_lock:
-        # DELETE THE FOLLOWING BEFORE PUSHING
-        if basic_telemetry["last_time"] is None:
-            basic_telemetry["last_time"] = datetime.datetime.now().timestamp()
-            basic_telemetry["latitude"] = random.uniform(40.7123, 60.7133)
-            basic_telemetry["longitude"] = random.uniform(-74.0065, -60.0055)
-            basic_telemetry["rth_altitude"] = random.uniform(145.0, 155.0)
-            basic_telemetry["dlat"] = random.uniform(-50, 50)
-            basic_telemetry["dlon"] = random.uniform(-50, 50)
-            basic_telemetry["dalt"] = random.uniform(-50, 50)
-            basic_telemetry["heading"] = random.randint(0, 360)
-            basic_telemetry["roll"] =  random.uniform(-5.0, 5.0)
-            basic_telemetry["pitch"] =  random.uniform(-5.0, 5.0)
-            basic_telemetry["yaw"] =  random.uniform(-5.0, 5.0)
-            basic_telemetry["flight_mode"] =  -1
-            basic_telemetry["battery_remaining"] =  random.uniform(30.0, 100.0)
-            basic_telemetry["battery_voltage"] =  random.uniform(10.1, 80.6)
-    return basic_telemetry.copy()
+        return basic_telemetry.copy()
 
 
 def setFlightMode(mode: str):
