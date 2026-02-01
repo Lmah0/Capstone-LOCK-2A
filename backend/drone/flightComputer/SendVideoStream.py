@@ -101,7 +101,7 @@ def video_frame_probe(info, klv_src):
     frame_count += 1
     return Gst.PadProbeReturn.OK
 
-def start_video_streaming(telemetry_callback=None):
+def start_streaming_video_and_telemetry(telemetry_callback=None):
     global current_telemetry_callback
     current_telemetry_callback = telemetry_callback
     
