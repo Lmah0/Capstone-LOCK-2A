@@ -1,144 +1,353 @@
-import subprocess
-import sys
-import av
-import time
+import datetime
 import os
+import random
+import sys
+import time
+import struct
+
+import psutil
+import gi
 import json
-import socket
-from datetime import datetime
-# from .benchmarking.benchmarkSendingVideoStream import benchmark_ffmpeg
-# from .benchmarking.benchmarkSendingVideoStream import benchmark_video_quality
-from fractions import Fraction
 from dotenv import load_dotenv
+import os
 
-load_dotenv(dotenv_path="../../../../.env")
+gi.require_version("Gst", "1.0")
+from gi.repository import Gst, GLib
 
+# --- Global Metrics State (Used by GStreamer callbacks) ---
+metrics = {"packet_count": 0, "total_bytes": 0, "start_time": 0}
+
+# --- Configuration ---
+script_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(script_dir, "../../../../.env")
+load_dotenv(dotenv_path=env_path)
 VIDEO_INPUT_DEVICE = "/dev/video0"
-GCS_VIDEO_IP = "udp://" + os.getenv(
-        "GCS_IP", "192.168.") + ":5000"
-GCS_TIMESTAMP_IP = (os.getenv(
-        "GCS_IP", "192.168."), 5001)
-TIMESTAMP_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+GCS_IP = os.getenv(
+        "GCS_IP", "192.168.1.8")
+GCS_PORT = 5000
+FPS = 60
 
-def setup_video_pipeline():
-    """Helper: Handles all the complex PyAV / FFmpeg configuration"""
-    # Open input camera
-    input_container = av.open(
-        VIDEO_INPUT_DEVICE,
-        format="v4l2",
-        options={
-            "framerate": "30",
-            "video_size": "1280x720",
-            "input_format": "h264",
-        },
+current_telemetry_callback = None
+frame_count = 0
+
+def build_pipeline_string():
+    """
+    Constructs the GStreamer pipeline string.
+    """
+    return (
+        # ---Define Video Output ---
+        f"mpegtsmux name=mux alignment=7 ! "  # MPEG-TS with KLV alignment
+        f"udpsink host={GCS_IP} port={GCS_PORT} sync=false "  # Send to GCS IP using UDP
+        # --- Define Video Source ---
+        f"v4l2src name=cam_src device={VIDEO_INPUT_DEVICE} ! "  # Get video from dev/video0
+        f"video/x-raw,width=1280,height=720,framerate={FPS}/1 ! "  # Set resolution & framerate
+        "videoconvert ! "  # Ensure format compatibility with encoder
+        # --- Define Encoder ---
+        "x264enc "  # Use H.264 Encoder
+        "tune=zerolatency "  # Disables buffering for low latency
+        "speed-preset=ultrafast "  # Prioritize speed over compression and quality
+        "bitrate=3000 "  # Set target bandwidth to 3000 kbps
+        "sliced-threads=true "      # Low latency multithreading
+        "key-int-max=60 "  # Send keyframe every 60 frames
+        "aud=true ! "  # Insert "Access Unit Delimiters" (helps the player find frame boundaries).
+        "h264parse config-interval=1 ! " # Parse H.264 stream, send headers (SPS/PPS) every second
+        "mux. "
+        # Define KLV Metadata Stream --
+        "appsrc name=klv_src format=time is-live=true do-timestamp=true "  # Create empty input pipe to write binary data to
+        'caps="meta/x-klv, parsed=true, sparse=true" ! mux.'  # Define metadata format as KLV for muxer
     )
 
-    # Open output stream
-    output_container = av.open(GCS_VIDEO_IP, "w", format="mpegts")
+def video_frame_probe(info, klv_src):
+    """
+    Triggered whenever a video frame passes the camera source.
+    """
+    global frame_count
     
-    # Configure output stream
-    video_stream = output_container.add_stream("libx264", rate=30)
-    video_stream.width = 1280
-    video_stream.height = 720
-    video_stream.pix_fmt = "yuv420p"
-    video_stream.options = {
-        "preset": "ultrafast",
-        "tune": "zerolatency",
-        "maxrate": "3M",
-        "bufsize": "6M",
-        "g": "30",
-        "x264-params": "aud=1:repeat-headers=1:slice-max-size=1200",
-    }
+    capture_time = time.time()
     
-    return input_container, output_container, video_stream
+    # Get Data
+    telemetry_data = {}
+    if current_telemetry_callback:
+        try:
+            telemetry_data = current_telemetry_callback()
+        except Exception:
+            pass
 
-def send_timestamp_packet(frame_count, capture_time, start_time):
-    """Helper: Handles purely the JSON packaging and UDP sending"""
-    timestamp_data = {
+    # Build KLV Packet
+    klv_data = {
         "frame_number": frame_count,
-        "wall_clock_time": capture_time,
-        "datetime": datetime.fromtimestamp(capture_time).isoformat(),
-        "pts": frame_count,
-        "elapsed_seconds": capture_time - start_time,
+        "video_timestamp": capture_time, 
     }
+    klv_data.update(telemetry_data)
+    # Create GStreamer Buffer and add data
+    data_bytes = json.dumps(klv_data).encode("utf-8")
+    gst_buffer = Gst.Buffer.new_allocate(None, len(data_bytes), None)
+    gst_buffer.fill(0, data_bytes)
 
-    try:
-        message = json.dumps(timestamp_data).encode("utf-8")
-        TIMESTAMP_SOCKET.sendto(message, GCS_TIMESTAMP_IP)
-    except Exception as e:
-        print(f"Timestamp send error: {e}")
+    # Synchronize Timestamps
+    # Copy the timestamp from the VIDEO buffer to the METADATA buffer
+    # Aligns them perfectly in the Muxer 
+    video_pts = info.get_buffer().pts
+    gst_buffer.pts = video_pts
+    gst_buffer.duration = Gst.util_uint64_scale_int(1, Gst.SECOND, FPS)
 
-def start_video_streaming(timestamps_enabled=True):
-    """The Main Conductor: Orchestrates the loop"""
-    print(f"Starting video streaming to {GCS_VIDEO_IP} with timestamps: {timestamps_enabled}")
+    # Push KLV data into klv_src
+    retval = klv_src.emit("push-buffer", gst_buffer)
     
-    # Setup video pipeline
-    input_container, output_container, video_stream = setup_video_pipeline()
-    input_stream = input_container.streams.video[0]
+    if frame_count % 60 == 0:
+        print(f"Frame {frame_count} | Sync Send OK")
 
-    frame_count = 0
-    start_time = time.time()
+    frame_count += 1
+    return Gst.PadProbeReturn.OK
+
+def start_video_streaming(telemetry_callback=None):
+    global current_telemetry_callback
+    current_telemetry_callback = telemetry_callback
+    
+    print(f"Starting Event-Driven GStreamer broadcast to {GCS_IP}:{GCS_PORT}...")
+
+    Gst.init(None)
+    pipeline = Gst.parse_launch(build_pipeline_string())
+
+    klv_src = pipeline.get_by_name("klv_src") # Get input pipe for metadata
+    cam_src = pipeline.get_by_name("cam_src") # Output port for camera
+    
+    if not klv_src or not cam_src:
+        print("Error: Could not find 'klv_src' or 'cam_src'")
+        sys.exit(1)
+
+    # Attach Probe to Video Source
+    src_pad = cam_src.get_static_pad("src")
+    src_pad.add_probe(Gst.PadProbeType.BUFFER, video_frame_probe, klv_src) # Trigger video_frame_probe every time a frame passes through cam_src
+
+    pipeline.set_state(Gst.State.PLAYING)
+
+    # Run MainLoop (Keeps script alive without eating CPU)
+    loop = GLib.MainLoop()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        print("\nStreaming stopped.")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        pipeline.set_state(Gst.State.NULL)
+
+
+def monitor_probe(pad, info, user_data):
+    """
+    Callback function that runs for EVERY packet leaving the device.
+    We use this to count actual bytes sent to the network.
+    """
+    global metrics
+    buffer = info.get_buffer()
+    if buffer:
+        # Update counters
+        metrics["total_bytes"] += buffer.get_size()
+        metrics["packet_count"] += 1
+
+    return Gst.PadProbeReturn.OK
+
+
+def benchmark_gstreamer(duration=60):
+    """
+    Runs the GStreamer pipeline and measures performance.
+    """
+    print(f"\n=== Starting GStreamer Benchmark for {duration} seconds ===\n")
+
+    # Setup GStreamer
+    Gst.init(None)
+    pipeline_str = build_pipeline_string()
+    pipeline = Gst.parse_launch(pipeline_str)
+
+    # Attach Probe to measure data flow (The Speedometer)
+    monitor = pipeline.get_by_name("monitor")
+    sink_pad = monitor.get_static_pad("src")
+    sink_pad.add_probe(Gst.PadProbeType.BUFFER, monitor_probe, None)
+
+    # Setup Metadata Source
+    klv_src = pipeline.get_by_name("klv_src")
+
+    # Start Pipeline
+    pipeline.set_state(Gst.State.PLAYING)
+
+    # Initialize Metrics
+    process = psutil.Process(os.getpid())
+    metrics["start_time"] = time.time()
+    metrics["packet_count"] = 0
+    metrics["total_bytes"] = 0
+
+    cpu_usage = []
+    mem_usage = []
+    bitrate_values = []
+
+    last_measure_time = metrics["start_time"]
+    last_bytes = 0
+
+    # Calculate exact sleep time to simulate 60Hz metadata injection
+    frame_target_duration = 1.0 / FPS
 
     try:
-        # Send and timestamp packets
-        for packet in input_container.demux(input_stream):
-            for frame in packet.decode():
-                capture_time = time.time() 
-                
-                # Send Video
-                frame.pts = frame_count
-                frame.time_base = Fraction(1, 30)
-                for video_packet in video_stream.encode(frame):
-                    output_container.mux(video_packet)
+        while True:
+            loop_start = time.time()
+            elapsed_total = loop_start - metrics["start_time"]
 
-                # Send Timestamp (Delegated to helper)
-                if timestamps_enabled:
-                    send_timestamp_packet(frame_count, capture_time, start_time)
+            # --- Stop Condition ---
+            if elapsed_total > duration:
+                break
 
-                # Logging
-                if frame_count % 30 == 0:
-                    elapsed = capture_time - start_time
-                    print(f"Frame {frame_count} | Elapsed: {elapsed:.2f}s")
+            # --- Inject Dummy Metadata (Required to keep pipeline healthy) ---
+            # Even though this is a benchmark, feed the 'appsrc' or it might stall
+            data = json.dumps({"ts": loop_start}).encode("utf-8")
+            buf = Gst.Buffer.new_allocate(None, len(data), None)
+            buf.fill(0, data)
+            # Use pipeline time for PTS
+            buf.pts = Gst.util_get_timestamp() - pipeline.get_base_time()
+            buf.duration = Gst.util_uint64_scale_int(1, Gst.SECOND, FPS)
+            klv_src.emit("push-buffer", buf)
 
-                frame_count += 1
+            # --- Measure System Stats (Every 1 second) ---
+            if loop_start - last_measure_time >= 1.0:
+                # CPU & Mem
+                cpu = process.cpu_percent(interval=None)
+                mem = process.memory_info().rss / (1024 * 1024)  # MB
+
+                # Bitrate Calculation (Bytes since last check * 8 / time_diff)
+                bytes_diff = metrics["total_bytes"] - last_bytes
+                time_diff = loop_start - last_measure_time
+                current_bitrate_kbps = (bytes_diff * 8) / time_diff / 1000
+
+                # Store
+                cpu_usage.append(cpu)
+                mem_usage.append(mem)
+                bitrate_values.append(current_bitrate_kbps)
+
+                # Print Live Stats
+                print(
+                    f"\rTime: {elapsed_total:.0f}s | CPU: {cpu:.1f}% | Mem: {mem:.1f}MB | Bitrate: {current_bitrate_kbps:.0f} kbps",
+                    end="",
+                )
+
+                # Reset tick counters
+                last_measure_time = loop_start
+                last_bytes = metrics["total_bytes"]
+
+            # --- Precision Timing ---
+            processing_time = time.time() - loop_start
+            sleep_time = max(0, frame_target_duration - processing_time)
+            time.sleep(sleep_time)
 
     except KeyboardInterrupt:
-        print("\nStreaming stopped by user.")
+        print("\nBenchmark stopped manually.")
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        print(f"\nError: {e}")
     finally:
-        # Cleanup Phase
-        if output_container:
-            for packet in video_stream.encode():
-                output_container.mux(packet)
-            output_container.close()
-        
-        if input_container:
-            input_container.close()
-            
-        TIMESTAMP_SOCKET.close()
+        pipeline.set_state(Gst.State.NULL)
 
+    # --- Generate Report ---
+    avg = lambda v: sum(v) / len(v) if v else 0
 
-
-if __name__ == "__main__":
-    user_selection = input(
-        "Select an option:\n"
-        "1: Benchmark FFmpeg Performance\n"
-        "2: Benchmark Stream Video Quality\n"
-        "3: Stream Video Only\n"
-        "Press Enter to send video with timestamps (2 ports)\n"
-        "Enter your choice: "
+    report = (
+        f"\n\n=== GStreamer Benchmark Report ===\n"
+        f"Date: {datetime.datetime.now():%Y-%m-%d %H:%M:%S}\n"
+        f"Duration: {duration}s\n"
+        f"Avg CPU Usage: {avg(cpu_usage):.2f}%\n"
+        f"Avg Memory Usage: {avg(mem_usage):.2f} MB\n"
+        f"Avg Bitrate: {avg(bitrate_values):.0f} kbps\n"
+        f"Total Data Sent: {metrics['total_bytes']/1024/1024:.2f} MB\n"
     )
 
-    if user_selection == "1":
-        # benchmark_ffmpeg(setup_video_pipeline(), duration=60)
-        pass
-    elif user_selection == "2":
-        # benchmark_video_quality(duration=30)
-        pass
-    elif user_selection == "3":
-        start_video_streaming(timestamps_enabled=False)
+    print(report)
+    with open("benchmark_results_gstreamer.txt", "a") as f:
+        f.write(report)
+
+
+# --- Functions for benchmarking video quality ---
+def generate_reference_video(duration=30, filename="reference.mp4"):
+    """
+    Records a high-quality raw video from the camera to use as Ground Truth.
+    """
+    print(f"Recording {duration}s reference video to '{filename}'...")
+
+    # High bitrate (10Mbps) to ensure the reference is clean
+    pipeline_str = (
+        f"v4l2src device={VIDEO_INPUT_DEVICE} num-buffers={duration*FPS} ! "
+        f"video/x-raw,width=1280,height=720,framerate={FPS}/1 ! "
+        "videoconvert ! "
+        "x264enc speed-preset=superfast bitrate=10000 ! "  # High Quality
+        "mp4mux ! "
+        f"filesink location={filename}"
+    )
+
+    pipeline = Gst.parse_launch(pipeline_str)
+    pipeline.set_state(Gst.State.PLAYING)
+
+    # Wait for completion
+    bus = pipeline.get_bus()
+    msg = bus.timed_pop_filtered(
+        Gst.CLOCK_TIME_NONE, Gst.MessageType.EOS | Gst.MessageType.ERROR
+    )
+
+    pipeline.set_state(Gst.State.NULL)
+    print("✓ Reference recording complete.")
+
+
+def stream_reference_file(filename="reference.mp4"):
+    """
+    Reads the reference file and streams it to the Laptop
+    using the EXACT same compression settings as your real flight code.
+    """
+    print(f"Streaming '{filename}' to {GCS_IP}:{GCS_PORT} for analysis...")
+
+    # 1. Read File -> 2. Decode -> 3. Re-Encode (Flight Settings) -> 4. Send
+    pipeline_str = (
+        f"filesrc location={filename} ! "
+        "qtdemux ! h264parse ! avdec_h264 ! "  # Decode reference
+        "videoconvert ! "
+        "x264enc tune=zerolatency speed-preset=ultrafast bitrate=3000 key-int-max=60 aud=true ! "
+        "mpegtsmux alignment=7 ! "
+        f"udpsink host={GCS_IP} port={GCS_PORT} sync=true"  # sync=true for file playback
+    )
+
+    pipeline = Gst.parse_launch(pipeline_str)
+    pipeline.set_state(Gst.State.PLAYING)
+
+    # Wait for file to finish
+    bus = pipeline.get_bus()
+    bus.timed_pop_filtered(
+        Gst.CLOCK_TIME_NONE, Gst.MessageType.EOS | Gst.MessageType.ERROR
+    )
+
+    pipeline.set_state(Gst.State.NULL)
+    print("✓ Streaming complete.")
+
+
+def get_mock_telemetry():
+    """Simulates a drone flying in a circle."""
+    return {
+        "last_time": datetime.datetime.now().timestamp(),
+        "latitude": random.uniform(40.7123, 60.7133),
+        "longitude": random.uniform(-74.0065, -60.0055),
+        "rth_altitude": random.uniform(145.0, 155.0),
+        "dlat": random.uniform(0.1, 5.0), # Ground X speed (Latitude, positive north)
+        "dlon": random.uniform(0.1, 5.0), # Ground Y Speed (Longitude, positive east)
+        "dalt": random.uniform(0.1, 5.0), # Ground Z speed (Altitude, positive down)
+        "heading": random.randint(0, 360),
+        "roll": random.uniform(-5.0, 5.0),
+        "pitch": random.uniform(-5.0, 5.0),
+        "yaw": random.uniform(-5.0, 5.0),
+        "flight_mode": -1,
+        "battery_remaining": random.uniform(30.0, 100.0), # not receiving from vehicle yet
+        "battery_voltage": random.uniform(10.1, 80.6)   # not receiving from vehicle yet
+    }
+
+if __name__ == "__main__":
+    user_input = input(
+        "Enter '1' to run benchmark or anything else to start streaming: "
+    )
+
+    if user_input == "1":
+        benchmark_gstreamer()
     else:
-        start_video_streaming(timestamps_enabled=True)
+        start_video_streaming(telemetry_callback=get_mock_telemetry)

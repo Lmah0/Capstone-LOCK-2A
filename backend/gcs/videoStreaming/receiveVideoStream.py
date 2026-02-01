@@ -1,360 +1,331 @@
+import subprocess
 import sys
 import os
-
-# Add directory of this file to sys.path so files importing this can find TimestampReceiver
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-
 import av
 import cv2
 import time
+import json
+import threading
+import numpy as np
 from datetime import datetime
-from TimestampReceiver import TimestampReceiver
-from benchmarking.benchmarkReceivingVideoStream import run_quality_metrics
-import queue
 
 # --- CONFIGURATION ---
-STREAM_URL = "udp://" + os.getenv(
-        "FLIGHT_COMP_IP", "192.168.") + ":5000"
-TIMESTAMP_PORT = 5001
+STREAM_URL = "udp://0.0.0.0:5000?overrun_nonfatal=1&fifo_size=10000"
 
+# Reduce log noise
 av.logging.set_level(av.logging.PANIC)
 
 
-def setup_video_stream(url):
-    """Opens the stream using PyAV with low-latency flags."""
-    print(f"Connecting to video stream: {url}...")
-    try:
-        container = av.open(
-            url,
-            options={
-                "rtbufsize": "100M",
-                "fflags": "nobuffer",
-                "flags": "low_delay",
-                "probesize": "32",
-                "fifo_size": "5000000",
-            },
-        )
-        print("✓ Video stream successfully opened")
-        return container
-    except Exception as e:
-        print(f"Failed to open stream: {e}")
-        return None
+class VideoStreamReceiver:
+    def __init__(self, stream_url=STREAM_URL):
+        self.stream_url = stream_url
+        self.running = False
+        self.thread = None
+        self.lock = threading.Lock()
 
+        # Shared Variables
+        self.latest_frame = None
+        self.latest_telemetry = {
+            "frame_number": -1,
+            "error": "Waiting for stream...",
+            "latency_ms": None,
+        }
 
-def read(stream_url=STREAM_URL, timestamp_port=TIMESTAMP_PORT):
-    """
-    Generator that yields frames with timestamps
-    Returns: (frame_array, timestamp_info_dict)
-    """
-    container = None
-    timestamp_receiver = None
-    timestamp_thread = None
-    try:
-        container = setup_video_stream(stream_url)
-
-        if not container:
+    def start(self):
+        if self.running:
             return
-        video_stream = container.streams.video[0]
-        video_stream.thread_type = "AUTO"  # Use multiple CPU cores for decoding
-        print(f"✓ Video: {video_stream.width}x{video_stream.height}")
-        # Start timestamp receiver
-        timestamp_receiver = TimestampReceiver(timestamp_port)
-        timestamp_thread = timestamp_receiver.start_receiving()
+        self.running = True
+        self.thread = threading.Thread(target=self.update_loop, daemon=True)
+        self.thread.start()
+        print(f"Background thread started for {self.stream_url}")
 
-        stream_stabilized = False
+    def stop(self):
+        self.running = False
+        if self.thread:
+            print("Stopping background thread...")
+            self.thread.join()
 
-        for packet in container.demux(video_stream):
+    def update_loop(self):
+        """Background loop: Reads packets continuously."""
+        print(f"Connecting to {self.stream_url}...")
+        container = None
+
+        while self.running:
             try:
-                for frame in packet.decode():
-                    if not stream_stabilized:
-                        if frame.key_frame:
-                            stream_stabilized = (
-                                True  # We found a full picture! Start showing video.
-                            )
-                        else:
-                            continue  # Throw away P-frames until we get a full picture.
-                    receive_time = time.time()
-                    img = frame.to_ndarray(format="bgr24")
-                # 1. Convert to seconds: 21990000 / 90000 = 244.33 seconds
-                    timestamp_in_seconds = float(frame.pts * frame.time_base)
+                # Re-open connection if lost
+                if container is None:
+                    container = av.open(
+                        self.stream_url,
+                        options={
+                            "fflags": "nobuffer+discardcorrupt",
+                            "flags": "low_delay",
+                            "flush_packets": "1",
+                            "probesize": "32",
+                            "analyzeduration": "0",
+                            "reorder_queue_size": "0",
+                            "max_delay": "0",  # Don't wait for packets
+                            "timeout": "2000000",    # For TCP/General
+                            "rw_timeout": "2000000"  # For UDP/RTSP usually
+                        },
+                    )
+                    container.streams.video[0].thread_type = (
+                        "AUTO"  # Multi-threaded decode
+                    )
+                    print("Stream Connected.")
 
-                    # 2. Convert to Frame ID: 244.33 * 30 fps = 7330
-                    current_frame_id = int(round(timestamp_in_seconds * 30))
-                                        
-                    # Get timestamp info for this frame based on frame ID from sender
-                    timestamp_info = timestamp_receiver.get_timestamp(current_frame_id)
-                    if timestamp_info:
-                        timestamp_info["receive_time"] = receive_time
+                # Demux Packets
+                for packet in container.demux():
+                    if not self.running:
+                        break
 
-                        wall_clock = timestamp_info.get("wall_clock_time")
+                    # Handle Telemetry (Metadata)
+                    if packet.stream.type == "data":
+                        try:
+                            payload = bytes(packet)
+                            text = payload.decode("utf-8", errors="ignore")
+                            meta = json.loads(text)
 
-                        if wall_clock is not None:
-                            timestamp_info["latency_ms"] = (
-                                receive_time - wall_clock
-                            ) * 1000
-                        else:
-                            timestamp_info["latency_ms"] = None
+                            # Calculate Latency immediately upon arrival
+                            meta["receive_time"] = time.time()
+                            if meta.get("video_timestamp"):
+                                meta["latency_ms"] = (
+                                    meta["receive_time"] - meta["video_timestamp"]
+                                ) * 1000
 
-                    else:
-                        timestamp_info = {
-                            "frame_number": current_frame_id,
-                            "receive_time": receive_time,
-                            "wall_clock_time": None,
-                            "latency_ms": None,
-                        }
-                    yield img, timestamp_info
+                            with self.lock:
+                                self.latest_telemetry = meta
 
-            except av.error.InvalidDataError as e:
-                print(f"Skipping corrupted packet: {e}")
-                continue
+                        except Exception:
+                            pass
 
-    except Exception as e:
-        print(f"Error during video streaming: {e}")
-    finally:
+                    # Handle Video
+                    elif packet.stream.type == "video":
+                        try:
+                            for frame in packet.decode():
+                                img = frame.to_ndarray(format="bgr24")
+    
+                                with self.lock:
+                                    self.latest_frame = img
+                        except (av.FFmpegError, OSError, ValueError) as e:
+                            print(f"Video Decode Error: {e}. Continuing...")
+                            continue
+    
+            except (av.FFmpegError, OSError) as e:
+                # This outer block now only catches major network failures (like timeout)
+                print(f"Critical Stream Error: {e}. Retrying in 2s...")
+                if container:
+                    container.close()
+                    container = None
+                time.sleep(2)
+            except Exception as e:
+                print(f"Unexpected Error: {e}")
+                break
+
         if container:
             container.close()
-        if timestamp_receiver:
-            timestamp_receiver.stop_receiving()
-        if timestamp_thread:
-            timestamp_thread.join(timeout=1.0)
-        print("Stream resources released.")
+        print("Stream closed.")
 
-
-def video_telemetry_sync_task(
-    stream_url, timestamp_port, sync_manager, frame_queue, stop_event
-):
-    print(f"Starting sync task on {stream_url}...")
-    while not stop_event.is_set():
-        try:
-            for frame, ts_info in read(
-                stream_url, timestamp_port
-            ):
-                if ts_info["wall_clock_time"] is None or frame is None:
-                    continue
-
-                success, buffer = cv2.imencode(
-                    ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
-                )
-                if not success:
-                    continue
-
-                jpeg_bytes = buffer.tobytes()
-                frame_num = ts_info["frame_number"]
-                wall_clock = ts_info["wall_clock_time"]
-
-                timestamped_frame = sync_manager.add_frame(
-                    frame_num,
-                    wall_clock,
-                    jpeg_bytes,
-                )
-
-                if frame_num % 30 == 0:
-                    diff = "N/A"
-                    if timestamped_frame.telemetry:
-                        diff = f"{timestamped_frame.telemetry.get('sync_time_diff_ms', 0):.2f}ms"
-                        print(f"Frame {frame_num}: synced (diff: {diff})")
-                    else:
-                        print(f"Frame {frame_num}: no telemetry")
-
-                try:
-                    while not frame_queue.empty():
-                        frame_queue.get_nowait()
-                    frame_queue.put(jpeg_bytes, block=False)
-                except queue.Full:
-                    pass
-
-        except KeyboardInterrupt:
-            print("Sync task stopped by user.")
-        except Exception as e:
-            print(f"Sync task crashed: {e}")
+    def read(self):
+        """Returns the absolute NEWEST frame and telemetry."""
+        with self.lock:
+            if self.latest_frame is None:
+                return None, self.latest_telemetry
+            return self.latest_frame, self.latest_telemetry
 
 
 def display_video_stream():
-    """Display video stream with timestamp overlay"""
-    print("Starting video display with timestamps...")
-    print("Press 'q' to quit\n")
+    """Function to display the incoming video stream with telemetry overlay."""
+    receiver = VideoStreamReceiver()
+    receiver.start()
 
-    for frame, timestamp_info in read():
-        frame_display = frame.copy()
-        frame_num = timestamp_info["frame_number"]
+    # Wait for connection
+    time.sleep(1)
+    print("Starting Display... Press 'q' to quit.")
 
-        # Draw background
-        cv2.rectangle(frame_display, (10, 10), (500, 120), (0, 0, 0), -1)
-        cv2.rectangle(frame_display, (10, 10), (500, 120), (0, 255, 0), 2)
+    try:
+        while True:
+            # Get latest data (non-blocking)
+            frame, ts_info = receiver.read()
 
-        # Frame number
-        cv2.putText(
-            frame_display,
-            f"Frame: {frame_num}",
-            (20, 35),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),
-            2,
-        )
+            if frame is None:
+                time.sleep(0.01)  # Don't hog CPU if no video yet
+                continue
 
-        # Timestamps
-        if timestamp_info["wall_clock_time"]:
-            capture_dt = datetime.fromtimestamp(timestamp_info["wall_clock_time"])
+            # --- Draw Info Box ---
+            display_frame = frame.copy()
+            cv2.rectangle(display_frame, (0, 0), (450, 140), (0, 0, 0), -1)
+            cv2.rectangle(display_frame, (0, 0), (450, 140), (0, 255, 0), 2)
+
+            # --- Extract Data ---
+            frame_num = ts_info.get("frame_number", "N/A")
+            wall_time = ts_info.get("video_timestamp")
+            latency = ts_info.get("latency_ms")
+            receive_time = ts_info.get("receive_time")
+
+
+            # Display Text
             cv2.putText(
-                frame_display,
-                f"Captured: {capture_dt.strftime('%H:%M:%S.%f')[:-3]}",
-                (20, 60),
+                display_frame,
+                f"Frame: {frame_num}",
+                (20, 35),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
+                0.7,
                 (0, 255, 0),
                 2,
             )
 
-            latency_color = (
-                (0, 255, 0) if timestamp_info["latency_ms"] < 100 else (0, 165, 255)
-            )
-            cv2.putText(
-                frame_display,
-                f"Latency: {timestamp_info['latency_ms']:.2f}ms",
-                (20, 85),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                latency_color,
-                2,
-            )
-        else:
-            cv2.putText(
-                frame_display,
-                "No timestamp data",
-                (20, 60),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 0, 255),
-                2,
-            )
-
-        receive_dt = datetime.fromtimestamp(timestamp_info["receive_time"])
-        cv2.putText(
-            frame_display,
-            f"Received: {receive_dt.strftime('%H:%M:%S.%f')[:-3]}",
-            (20, 110),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),
-            2,
-        )
-
-        cv2.imshow("Video Stream with Timestamps", frame_display)
-
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-
-    cv2.destroyAllWindows()
-
-
-def benchmark_video_stream(duration=60):
-    """Benchmark video stream with timestamp analysis"""
-    from benchmarking.benchmarkReceivingVideoStream import StreamBenchmark
-
-    benchmark = StreamBenchmark()
-    stream = read()
-
-    print(f"Starting benchmark for {duration}s...\n")
-
-    start_time = time.time()
-    latencies = []
-    frames_with_timestamps = 0
-    total_frames = 0
-
-    try:
-        for frame, timestamp_info in stream:
-            benchmark.log_stream_data(success=True)
-            total_frames += 1
-
-            if timestamp_info["latency_ms"] is not None:
-                latencies.append(timestamp_info["latency_ms"])
-                frames_with_timestamps += 1
-
-                if total_frames % 60 == 0:
-                    avg_latency = sum(latencies) / len(latencies)
-                    elapsed = time.time() - start_time
-                    print(
-                        f"Frame {total_frames:5d} | Elapsed: {elapsed:6.2f}s | "
-                        f"Latency: {timestamp_info['latency_ms']:6.2f}ms | "
-                        f"Avg: {avg_latency:6.2f}ms"
-                    )
-
-            frame_display = frame.copy()
-            if timestamp_info["latency_ms"]:
-                text = f"Frame {total_frames} | Latency: {timestamp_info['latency_ms']:.1f}ms"
+            if wall_time:
+                dt = datetime.fromtimestamp(wall_time)
+                time_str = dt.strftime("%H:%M:%S.%f")[:-3]
                 cv2.putText(
-                    frame_display,
-                    text,
-                    (10, 30),
+                    display_frame,
+                    f"Drone Time: {time_str}",
+                    (20, 70),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
                     (0, 255, 0),
                     2,
                 )
 
-            cv2.imshow("Benchmarking Stream", frame_display)
+            if receive_time:
+                dt = datetime.fromtimestamp(receive_time)
+                time_str = dt.strftime("%H:%M:%S.%f")[:-3]
+                cv2.putText(
+                    display_frame,
+                    f"GCS Time: {time_str}",
+                    (20, 105),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2,
+                )
+
+            if latency is not None:
+                color = (0, 255, 0) if latency < 150 else (0, 0, 255)
+                cv2.putText(
+                    display_frame,
+                    f"Latency: {latency:.1f} ms",
+                    (20, 140),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    color,
+                    2,
+                )
+
+            cv2.imshow("GCS Stream (Threaded)", display_frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("Benchmark stopped by user.")
                 break
-
-            if time.time() - start_time >= duration:
-                print(f"Benchmark completed after {duration}s.")
-                break
-
-    except Exception as e:
-        print(f"Benchmark interrupted: {e}")
-        benchmark.log_stream_data(success=False)
     finally:
+        receiver.stop()
         cv2.destroyAllWindows()
 
-    # Print statistics
-    print("\n" + "=" * 70)
-    print("TIMESTAMP STATISTICS")
-    print("=" * 70)
-    print(f"Total frames received:           {total_frames}")
-    print(f"Frames with timestamps:          {frames_with_timestamps}")
 
-    if total_frames > 0:
-        match_rate = (frames_with_timestamps / total_frames) * 100
-        print(f"Timestamp match rate:            {match_rate:.1f}%")
+def benchmark_video_stream(duration=30):
+    """Function to bench mark the incoming video stream latency."""
+    print(f"Benchmarking for {duration} seconds...")
+    receiver = VideoStreamReceiver()
+    receiver.start()
 
+    start_time = time.time()
+    latencies = []
+    frames_counted = 0
+
+    try:
+        while (time.time() - start_time) < duration:
+            frame, info = receiver.read()
+            if frame is None:
+                continue
+
+            lat = info.get("latency_ms")
+            if lat:
+                latencies.append(lat)
+
+            frames_counted += 1
+            if frames_counted % 30 == 0:
+                # Artificial sleep to simulate AI load
+                time.sleep(0.03)
+                current_avg = sum(latencies[-30:]) / 30 if latencies else 0
+                print(f"Sampled {frames_counted} | Current Avg: {current_avg:.1f}ms")
+            else:
+                time.sleep(0.01)  #
+
+    finally:
+        receiver.stop()
+
+    print("\n" + "=" * 40)
+    print(f"Total Samples: {len(latencies)}")
     if latencies:
-        print(f"\nLATENCY ANALYSIS:")
-        print(f"  Average:    {sum(latencies)/len(latencies):.2f}ms")
-        print(f"  Minimum:    {min(latencies):.2f}ms")
-        print(f"  Maximum:    {max(latencies):.2f}ms")
+        print(f"Avg Latency: {sum(latencies)/len(latencies):.2f} ms")
+        print(f"Min Latency: {min(latencies):.2f} ms")
+        print(f"Max Latency: {max(latencies):.2f} ms")
+    print("=" * 40)
 
-        avg = sum(latencies) / len(latencies)
-        variance = sum((x - avg) ** 2 for x in latencies) / len(latencies)
-        jitter = variance**0.5
-        print(f"  Jitter:     {jitter:.2f}ms")
 
-    print("=" * 70)
+def record_incoming_stream(filename="received.mp4", duration=35):
+    """Saves the stream using FFmpeg subprocess for quality analysis later."""
+    print(f"Recording to '{filename}' for {duration}s using FFmpeg...")
 
-    return benchmark.report_stream_data()
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-t",
+        str(duration),
+        "-i",
+        "udp://0.0.0.0:5000?overrun_nonfatal=1&fifo_size=50000000",
+        "-c",
+        "copy",
+        filename,
+    ]
+
+    try:
+        subprocess.run(cmd, check=True)
+        print(f"\n✓ Saved to {filename}")
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg Error: {e}")
+    except FileNotFoundError:
+        print("Error: FFmpeg is not installed or not in PATH.")
+
+
+def run_quality_metrics_wrapper(ref="reference.mp4", recv="received.mp4"):
+    """Measures PSNR and SSIM between reference and received videos."""
+    null_out = "NUL" if os.name == "nt" else "/dev/null"
+
+    # Ensure received file exists
+    if not os.path.exists(recv):
+        print(f"Error: {recv} not found. Run option 4 first.")
+        return
+
+    commands = {
+        "psnr": f'ffmpeg -i "{ref}" -i "{recv}" -lavfi "psnr" -f null {null_out}',
+        "ssim": f'ffmpeg -i "{ref}" -i "{recv}" -lavfi "ssim" -f null {null_out}',
+    }
+
+    for name, cmd in commands.items():
+        print(f"\n--- Running {name.upper()} ---")
+        subprocess.run(cmd, shell=True)
 
 
 if __name__ == "__main__":
-    user_selection = input(
-        "Select an option:\n"
-        "1: Display Stream with Timestamps\n"
-        "2: Benchmark Performance with Latency Analysis\n"
-        "3: Benchmark Video Quality\n"
-        "Enter your choice: "
-    )
+    while True:
+        print("\n--- GCS Video Tool ---")
+        print("1: Display Stream (Threaded Low Latency)")
+        print("2: Benchmark Latency")
+        print("3: Run Quality Metrics (requires reference.mp4)")
+        print("4: Record Incoming Stream (for quality check)")
+        print("q: Quit")
 
-    if user_selection == "1":
-        display_video_stream()
-    elif user_selection == "2":
-        print(benchmark_video_stream(30))
-    elif user_selection == "3":
-        reference_video = "reference.mp4"
-        received_video = "received.mp4"
+        choice = input("Enter choice: ")
 
-        run_quality_metrics(reference_video, received_video)
-    else:
-        print("Invalid selection")
+        if choice == "1":
+            display_video_stream()
+        elif choice == "2":
+            benchmark_video_stream()
+        elif choice == "3":
+            run_quality_metrics_wrapper()
+        elif choice == "4":
+            record_incoming_stream()
+        elif choice.lower() == "q":
+            break
+        else:
+            print("Invalid Selection")
