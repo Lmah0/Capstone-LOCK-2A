@@ -12,7 +12,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[6]
 sys.path.insert(0, str(root))
-from backend.gcs.ai.AIEngine import TrackingEngine, TrackingConfig, ProcessingState
+from backend.gcs.ai.AIEngine import TrackingEngine
 
 class TestTrackingEngine:
     """Sanity tests for TrackingEngine class"""
