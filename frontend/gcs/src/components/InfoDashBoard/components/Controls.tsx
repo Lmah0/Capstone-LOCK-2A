@@ -1,5 +1,5 @@
 "use client";
-import { Switch, FormControlLabel, Box, Typography, Paper, Radio, RadioGroup, TextField, InputAdornment, Select, MenuItem, FormControl, Button } from '@mui/material';
+import { Switch, FormControlLabel, Box, Typography, Paper, Radio, RadioGroup, TextField, InputAdornment, Select, MenuItem, FormControl, Button, SelectChangeEvent } from '@mui/material';
 import { useState, useEffect } from 'react';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
@@ -64,7 +64,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
         }
     };
 
-    const handleFlightModeChange = async (event: any) => {
+    const handleFlightModeChange = async (event: SelectChangeEvent<string>) => {
         try {
             const newFlightMode = event.target.value;
             const resp = await axios.post(`http://localhost:8766/setFlightMode`, { mode: newFlightMode });

@@ -58,7 +58,7 @@ export default function RecordedObjects() {
             if(resp.status === 200) {
                 setRecordedObjects(prev => prev.filter(obj => obj.objectID !== objectId));
             }
-        } catch (error) {
+        } catch {
             alert('Failed to delete object.');
         } finally {
             setDeleteConfirmId(null);
@@ -80,7 +80,7 @@ export default function RecordedObjects() {
                 hour: '2-digit',
                 minute: '2-digit',
             });
-        } catch (error) {
+        } catch {
             return 'Invalid date';
         }
     };

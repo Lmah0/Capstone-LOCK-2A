@@ -7,7 +7,6 @@ export default function VideoFeed() {
 
     const [isWebRTCStreaming, setIsWebRTCStreaming] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [isTracking, setIsTracking] = useState(false);
     const [connectionState, setConnectionState] = useState<string>('disconnected');
 
     const wsRef = useRef<WebSocket | null>(null);
@@ -138,7 +137,7 @@ export default function VideoFeed() {
                     setTimeout(connectWebSocket, 3000);
                 };
 
-                ws.onerror = (error) => {
+                ws.onerror = () => {
                     setError('WebSocket connection error');
                 };
 
@@ -215,8 +214,6 @@ export default function VideoFeed() {
             x: actualX,
             y: actualY
         }));
-
-        setIsTracking(true);
     }, []);
 
     return (

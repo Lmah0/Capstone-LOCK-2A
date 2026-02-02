@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import HUD from '../components/HUD/HUD';
 import InfoDashBoard from '../components/InfoDashBoard/InfoDashBoard';
 
@@ -23,9 +23,9 @@ export default function Home() {
     localStorage.setItem('pinnedTelemetry', JSON.stringify(pinnedTelemetry));
   }, [pinnedTelemetry]);
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     setIsFullscreen(!isFullscreen);
-  };
+  }, [isFullscreen]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -40,7 +40,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, toggleFullscreen]);
 
   return (
     <div className="font-sans min-h-screen w-full flex flex-col bg-black">

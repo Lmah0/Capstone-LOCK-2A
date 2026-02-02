@@ -6,13 +6,13 @@ import axios from 'axios';
 interface WebSocketContextType {
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
   sendMessage: (message: string) => void;
-  telemetryData: any;
-  batteryData: any;
+  telemetryData: TelemetryData | null;
+  batteryData: { percentage: number; usage: number } | null;
   droneConnection: boolean;
   setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
   isRecording: boolean;
-  trackingData: any;
-  flightMode: Number;
+  trackingData: trackingData | null;
+  flightMode: number;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -32,13 +32,13 @@ interface WebSocketProviderProps {
 export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   const [telemetryData, setTelemetryData] = useState<TelemetryData | null>(null);
-  const [batteryData, setBatteryData] = useState<any>(null);
+  const [batteryData, setBatteryData] = useState<{ percentage: number; usage: number } | null>(null);
   const [droneConnection, setDroneConnection] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [trackingData, setTrackingData] = useState<trackingData | null>(null);
-  const [flightMode, setFlightMode] = useState<Number>(-1);
+  const [flightMode, setFlightMode] = useState<number>(-1);
   const isRecordingRef = useRef<boolean>(false);
-  const recordedDataRef = useRef<any[]>([]);
+  const recordedDataRef = useRef<Record<string, unknown>[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const droneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -143,7 +143,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             recordedDataRef.current.push({...data});
           }
         }
-      } catch (error) {
+      } catch {
         console.log('Received text:', event.data);
       }
     };
@@ -161,7 +161,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       }
     };
 
-    websocket.onerror = (error) => {
+    websocket.onerror = () => {
       setConnectionStatus('error');
     };
   };
@@ -187,6 +187,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         wsRef.current.close();
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value: WebSocketContextType = { 
