@@ -3,8 +3,7 @@ import os
 import random
 import sys
 import time
-import struct
-
+import socket
 import psutil
 import gi
 import json
@@ -23,8 +22,23 @@ env_path = os.path.join(script_dir, "../../../../.env")
 load_dotenv(dotenv_path=env_path)
 VIDEO_INPUT_DEVICE = "/dev/video0"
 
-GCS_IP = os.getenv(
-        "GCS_IP", "192.168.1.8")
+def get_local_ip():
+    """
+    Connects to a public DNS (Google) to determine the local routing IP.
+    Does not actually send data.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # We don't actually connect, just determining the route
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
+GCS_IP = os.getenv("GCS_IP", get_local_ip())
 GCS_PORT = 5000
 FPS = 60
 
