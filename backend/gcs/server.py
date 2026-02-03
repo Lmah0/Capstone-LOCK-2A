@@ -133,6 +133,7 @@ async def video_streaming_task():
             # --- If live video and mock both fail then sleep and retry ---
             if frame is None:
                 await asyncio.sleep(0.1)
+                continue
             
             newest_telemetry = metadata # Update newest telemetry for flight computer task
             telemetry_event.set() # Notify flight_computer_background_task new telemetry is available
@@ -161,7 +162,7 @@ async def video_streaming_task():
             # --- E. Rate Limiting ---
             # Calculates how much time is left in the 1/60th second window
             elapsed = time.time() - loop_start
-            sleep_time = max(0.005, target_interval - elapsed)
+            sleep_time = max(0, target_interval - elapsed)
             await asyncio.sleep(sleep_time)
 
     except asyncio.CancelledError:
