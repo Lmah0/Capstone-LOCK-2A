@@ -9,6 +9,7 @@ import traceback
 from contextlib import asynccontextmanager
 from typing import List
 import os
+import websockets
 import cv2
 import time
 import numpy as np
@@ -31,6 +32,7 @@ flight_comp_ws: WebSocket = None
 GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
 STREAM_URL = "udp://"+ os.getenv(
         "FLIGHT_COMP_IP", "192.168.1.66")+":" + str(GCS_VIDEO_PORT)  # Video from drone
+FLIGHT_COMP_URL = f"ws://{os.getenv('FLIGHT_COMP_IP')}:{os.getenv('RPI_BACKEND_PORT'), 5555}/ws/flight-computer"
 newest_telemetry = {}
 
 telemetry_event = asyncio.Event()
@@ -38,37 +40,39 @@ telemetry_event = asyncio.Event()
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
     global flight_comp_ws
-    global newest_telemetry
-    print("Starting flight computer background task...")
     while True:
         try:
-            await telemetry_event.wait()
-            telemetry_event.clear()
-            data = newest_telemetry.copy()
-
-            data["tracking"] = STATE.tracking  # Add tracking state
-            if STATE.tracked_class is not None and ENGINE.model is not None:
-                data["tracked_class"] = ENGINE.model.names[
-                    STATE.tracked_class
-                ]
-            else:
-                data["tracked_class"] = None
-            # Calculate distance from drone to target if tracking
-            if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
-                drone_lat = data.get("latitude")
-                drone_lon = data.get("longitude")
-                if drone_lat is not None and drone_lon is not None:
-                    distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
-                    data["distance_to_target"] = distance_meters
-                else:
-                    data["distance_to_target"] = None
-            else:
-                data["distance_to_target"] = None
+            async with websockets.connect(FLIGHT_COMP_URL) as ws:
+                flight_comp_ws = ws
+                print("Connected to flight computer")   
+                async for message in ws:
+                    try:
+                        data = json.loads(message)
+                        data["tracking"] = STATE.tracking # Add tracking state
+                        if STATE.tracked_class is not None and ENGINE.model is not None:
+                            data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
+                        else:
+                            data["tracked_class"] = None
                         
-            await send_data_to_connections(data)
-            await asyncio.sleep(0.05)
-        except json.JSONDecodeError:
-            continue
+                        # Calculate distance from drone to target if tracking
+                        if STATE.tracking and STATE.target_latitude is not None and STATE.target_longitude is not None:
+                            drone_lat = data.get("latitude")
+                            drone_lon = data.get("longitude")
+                            if drone_lat is not None and drone_lon is not None:
+                                distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
+                                data["distance_to_target"] = distance_meters
+                            else:
+                                data["distance_to_target"] = None
+                        else:
+                            data["distance_to_target"] = None
+                        
+                        await send_data_to_connections(data)
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            print(f"Flight computer connection error: {e}, retrying in 5s")
+            flight_comp_ws = None
+            await asyncio.sleep(5)
 
 
 video_stop_event = threading.Event()

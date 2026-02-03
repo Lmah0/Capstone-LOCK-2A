@@ -77,8 +77,15 @@ async def lifespan(app: FastAPI):
     print("Video streaming thread started")
     time.sleep(0.5)  # Give some time for the thread to start
     
+    background_task = asyncio.create_task(send_telemetry_data())
     yield
-
+    # Shutdown
+    if background_task:
+        background_task.cancel()
+        try:
+            await background_task
+        except asyncio.CancelledError:
+            pass
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
