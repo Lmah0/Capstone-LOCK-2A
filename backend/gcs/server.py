@@ -32,7 +32,7 @@ flight_comp_ws: WebSocket = None
 GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
 STREAM_URL = "udp://"+ os.getenv(
         "FLIGHT_COMP_IP", "192.168.1.66")+":" + str(GCS_VIDEO_PORT)  # Video from drone
-FLIGHT_COMP_URL = f"ws://{os.getenv('FLIGHT_COMP_IP')}:{os.getenv('RPI_BACKEND_PORT', "5555")}/ws/flight-computer"
+FLIGHT_COMP_URL = f"ws://{os.getenv('FLIGHT_COMP_IP')}:{os.getenv('RPI_BACKEND_PORT', '5555')}/ws/flight-computer"
 newest_telemetry = {}
 
 telemetry_event = asyncio.Event()
