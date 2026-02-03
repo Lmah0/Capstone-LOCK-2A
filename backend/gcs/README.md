@@ -11,6 +11,10 @@ The GCS backend serves as the central relay hub between the flight computer and 
 **Purpose**: Centralized database operations for DynamoDB integration
 
 ---
+## Ports in Use
+- `Port 5000 (GCS_VIDEO_PORT)` - Used for receiving video and telemetry from flight computer that's being sent via GStreamer
+- `Port 8766 (GCS_BACKEND_PORT)` - Used for communication between frontend and backend
+---
 
 ### **Data Flow Architecture**
 

@@ -39,7 +39,7 @@ def get_local_ip():
     return ip
 
 GCS_IP = os.getenv("GCS_IP", get_local_ip())
-GCS_PORT = 5000
+GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
 FPS = 60
 
 current_telemetry_callback = None
@@ -52,7 +52,7 @@ def build_pipeline_string():
     return (
         # ---Define Video Output ---
         f"mpegtsmux name=mux alignment=7 ! "  # MPEG-TS with KLV alignment
-        f"udpsink host={GCS_IP} port={GCS_PORT} sync=false "  # Send to GCS IP using UDP
+        f"udpsink host={GCS_IP} port={GCS_VIDEO_PORT} sync=false "  # Send to GCS IP using UDP
         # --- Define Video Source ---
         f"v4l2src name=cam_src device={VIDEO_INPUT_DEVICE} ! "  # Get video from dev/video0
         f"video/x-raw,width=1280,height=720,framerate={FPS}/1 ! "  # Set resolution & framerate
@@ -119,7 +119,7 @@ def start_streaming_video_and_telemetry(telemetry_callback=None):
     global current_telemetry_callback
     current_telemetry_callback = telemetry_callback
     
-    print(f"Starting Event-Driven GStreamer broadcast to {GCS_IP}:{GCS_PORT}...")
+    print(f"Starting Event-Driven GStreamer broadcast to {GCS_IP}:{GCS_VIDEO_PORT}...")
 
     Gst.init(None)
     pipeline = Gst.parse_launch(build_pipeline_string())
@@ -312,7 +312,7 @@ def stream_reference_file(filename="reference.mp4"):
     Reads the reference file and streams it to the Laptop
     using the EXACT same compression settings as your real flight code.
     """
-    print(f"Streaming '{filename}' to {GCS_IP}:{GCS_PORT} for analysis...")
+    print(f"Streaming '{filename}' to {GCS_IP}:{GCS_VIDEO_PORT} for analysis...")
 
     # 1. Read File -> 2. Decode -> 3. Re-Encode (Flight Settings) -> 4. Send
     pipeline_str = (
@@ -321,7 +321,7 @@ def stream_reference_file(filename="reference.mp4"):
         "videoconvert ! "
         "x264enc tune=zerolatency speed-preset=ultrafast bitrate=3000 key-int-max=60 aud=true ! "
         "mpegtsmux alignment=7 ! "
-        f"udpsink host={GCS_IP} port={GCS_PORT} sync=true"  # sync=true for file playback
+        f"udpsink host={GCS_IP} port={GCS_VIDEO_PORT} sync=true"  # sync=true for file playback
     )
 
     pipeline = Gst.parse_launch(pipeline_str)

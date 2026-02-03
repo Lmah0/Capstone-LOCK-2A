@@ -1,16 +1,15 @@
 import subprocess
-import sys
 import os
 import av
 import cv2
 import time
 import json
 import threading
-import numpy as np
 from datetime import datetime
 
 # --- CONFIGURATION ---
-STREAM_URL = "udp://0.0.0.0:5000?overrun_nonfatal=1&fifo_size=10000"
+GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
+STREAM_URL = "udp://0.0.0.0:" +  str(GCS_VIDEO_PORT) + "?overrun_nonfatal=1&fifo_size=10000"
 
 # Reduce log noise
 av.logging.set_level(av.logging.PANIC)
@@ -272,7 +271,7 @@ def record_incoming_stream(filename="received.mp4", duration=35):
         "-t",
         str(duration),
         "-i",
-        "udp://0.0.0.0:5000?overrun_nonfatal=1&fifo_size=50000000",
+        "udp://0.0.0.0:" + str(GCS_VIDEO_PORT) + "?overrun_nonfatal=1&fifo_size=50000000",
         "-c",
         "copy",
         filename,

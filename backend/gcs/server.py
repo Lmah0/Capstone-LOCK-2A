@@ -28,10 +28,9 @@ active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
 # Video stream configuration
+GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
 STREAM_URL = "udp://"+ os.getenv(
-        "FLIGHT_COMP_IP", "192.168.1.66")+":5000"  # Video from drone
-TIMESTAMP_PORT = 5001  # Timestamps from drone
-
+        "FLIGHT_COMP_IP", "192.168.1.66")+":" + str(GCS_VIDEO_PORT)  # Video from drone
 newest_telemetry = {}
 
 telemetry_event = asyncio.Event()
