@@ -7,7 +7,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 from typing import List
-from SendVideoStream import start_streaming_video_and_telemetry
+from sendVideoStream import start_streaming_video_and_telemetry
 from dotenv import load_dotenv
 import threading
 import socket

@@ -18,7 +18,7 @@ metrics = {"packet_count": 0, "total_bytes": 0, "start_time": 0}
 
 # --- Configuration ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(script_dir, "../../../../.env")
+env_path = os.path.join(script_dir, "../../../.env")
 load_dotenv(dotenv_path=env_path)
 VIDEO_INPUT_DEVICE = "/dev/video0"
 
@@ -72,7 +72,7 @@ def build_pipeline_string():
         'caps="meta/x-klv, parsed=true, sparse=true" ! mux.'  # Define metadata format as KLV for muxer
     )
 
-def video_frame_probe(info, klv_src):
+def video_frame_probe(pad, info, klv_src):
     """
     Triggered whenever a video frame passes the camera source.
     """
@@ -364,4 +364,4 @@ if __name__ == "__main__":
     if user_input == "1":
         benchmark_gstreamer()
     else:
-        start_video_streaming(telemetry_callback=get_mock_telemetry)
+        start_streaming_video_and_telemetry(telemetry_callback=get_mock_telemetry)
