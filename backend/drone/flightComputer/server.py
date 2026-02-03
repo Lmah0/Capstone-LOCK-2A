@@ -5,19 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import json
-import random
 from contextlib import asynccontextmanager
 from typing import List
-import os
 from SendVideoStream import start_streaming_video_and_telemetry
 from dotenv import load_dotenv
-import datetime
 import threading
 import socket
 import time
 from mavlinkMessages.mode import set_mode
-import threading
-import socket
 import time
 from mavlinkMessages.mode import set_mode
 from mavlinkMessages.connect import connect_to_vehicle, verify_connection
