@@ -78,3 +78,47 @@ jobs:
         working-directory: ./frontend/recording_analysis
         run: |
           npm test -- --watchAll=false --passWithNoTests
+
+  ai-engine-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run AI Engine tests
+        working-directory: ./backend/gcs/ai
+        run: |
+          python -m pytest tests/unit/detection/test_AIEngine.py -v --disable-warnings
+
+  geolocate-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run GeoLocate tests
+        working-directory: ./backend/gcs/ai
+        run: |
+          python -m pytest tests/unit/detection/test_GeoLocate.py -v --disable-warnings
