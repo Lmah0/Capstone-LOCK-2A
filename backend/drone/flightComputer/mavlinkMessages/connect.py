@@ -8,18 +8,14 @@ def verify_connection(connection):
 
     except Exception as e:
         print(f"Error: Unable to connect to the vehicle. See error info: {e}")
-    
-    return False
+        return False
 
 def connect_to_vehicle(ip_and_port='udp:127.0.0.1:14550'):
     try:
         connection = mavutil.mavlink_connection(ip_and_port)
-        if verify_connection(connection):
-            return connection
-        else:
-            print("Not a valid connection. Exiting.")
-            exit(1)
+    
     except Exception as e:
         print(f"Error: Unable to connect to the vehicle at {ip_and_port}. See error info: {e}")
+        exit(1)
     
-    return None
+    return connection

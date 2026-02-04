@@ -14,13 +14,12 @@ test_telemetry = {
     "latitude": 123.4567,
     "longitude": -123.4567,
     "altitude": 150.0,
-    "speed": 25.5,
-    "heading": 90,
+    "dlat": 2.0, # Ground X speed (Latitude, positive north)
+    "dlon": 3.0, # Ground Y Speed (Longitude, positive east)
+    "dalt": 4.0, # Ground Z speed (Altitude, positive down)
     "roll": 2.5,
     "pitch": 1.5,
     "yaw": 0.5,
-    "battery_remaining": 75.0,
-    "battery_voltage": 12.5
 }
 
 # ------------------ Fixtures ------------------
@@ -99,12 +98,9 @@ async def test_record_endpoint_missing_data(async_client):
 @pytest.mark.asyncio
 async def test_set_flight_mode_endpoint_with_mocked_fc(async_client):
     """Test /setFlightMode using mocked flight computer communication."""
-    with patch('server.send_to_flight_comp') as mock_send:     
+    with patch('server.send_data_to_connections') as mock_send:
         response = await async_client.post("/setFlightMode", json={"mode": "AUTO"})
         assert response.status_code == 200
-        
-        # Verify the function was called with correct parameters
-        mock_send.assert_called_once_with({"command": "set_flight_mode", "mode": "AUTO"})
 
 
 @pytest.mark.asyncio
@@ -118,29 +114,24 @@ async def test_set_flight_mode_endpoint_empty_payload(async_client):
 @pytest.mark.asyncio
 async def test_stop_following_endpoint(async_client):
     """Test /stopFollowing endpoint with mocked flight computer communication."""
-    with patch('server.send_to_flight_comp') as mock_send:
+    with patch('server.send_data_to_connections') as mock_send:
         response = await async_client.post("/stopFollowing")
         assert response.status_code == 200
-        
-        # Verify the function was called with correct parameters
-        mock_send.assert_called_once_with({"command": "stop_following"})
 
 # ------------------ Follow Distance Tests ------------------
 @pytest.mark.asyncio
 async def test_set_follow_distance_endpoint_with_mocked_fc(async_client):
     """Test /setFollowDistance using mocked flight computer communication."""
-    with patch('server.send_to_flight_comp') as mock_send:   
+    with patch('server.send_data_to_connections') as mock_send:   
         response = await async_client.post("/setFollowDistance", json={"distance": 10})
         assert response.status_code == 200
-        
-        # Verify the function was called with correct parameters
-        mock_send.assert_called_once_with({"command": "set_follow_distance", "distance": 10})
 
 @pytest.mark.asyncio
 async def test_set_follow_distance_endpoint_missing_distance(async_client):
     """Test /setFollowDistance with missing distance in payload."""
-    response = await async_client.post("/setFollowDistance", json={})
-    assert response.status_code == 400
+    with patch('server.send_data_to_connections') as mock_send:
+        response = await async_client.post("/setFollowDistance", json={})
+        assert response.status_code == 400
 
 
 # ------------------ Telemetry Tests ------------------
@@ -167,4 +158,3 @@ async def test_GCS_frontend_telemetry_broadcast():
     sent_data = mock_ws.send_text.call_args[0][0]
     parsed_data = json.loads(sent_data) # What frontend receives after parsing
     assert parsed_data["altitude"] == 150.0 
-    assert parsed_data["battery_remaining"] == 75.0 

@@ -22,6 +22,7 @@ beforeEach(() => {
     telemetryData: null,
     batteryData: null,
     trackingData: { tracking: false, tracked_class: null },
+    flightMode: 3,
   });
   axios.post.mockResolvedValue({ status: 200, data: {} });
   axios.get.mockResolvedValue({ status: 200, data: [] });
@@ -41,7 +42,7 @@ const mockProps = {
   setPinnedTelemetry: jest.fn(),
   followDistance: 10,
   setFollowDistance: jest.fn(),
-  flightMode: 'Manual',
+  flightMode: 3,
   setFlightMode: jest.fn(),
   isRecording: false,
   setIsRecording: jest.fn()
@@ -52,7 +53,6 @@ const mock_telemetry = {
   altitude: 1200,
   latitude: 37.7749,
   longitude: -122.4194,
-  heading: 90,
   roll: -1.5,
   pitch: 0.6,
   yaw: 2.5
@@ -91,7 +91,8 @@ test('Tabs Render and are Selectable', () => {
 test('Telemetry Tab Displays Data', () => {
   useWebSocket.mockReturnValue({ 
     telemetryData: mock_telemetry,
-    trackingData: { tracking: false, tracked_class: null }
+    trackingData: { tracking: false, tracked_class: null },
+    flightMode: 3
   });
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();
@@ -103,7 +104,6 @@ test('Telemetry Tab Displays Data', () => {
   const altitude = document.getElementById('info-dashboard-telemetry-altitude');
   const latitude = document.getElementById('info-dashboard-telemetry-latitude');
   const longitude = document.getElementById('info-dashboard-telemetry-longitude');
-  const heading = document.getElementById('info-dashboard-telemetry-heading');
   const roll = document.getElementById('info-dashboard-telemetry-roll');
   const pitch = document.getElementById('info-dashboard-telemetry-pitch');
   const yaw = document.getElementById('info-dashboard-telemetry-yaw');
@@ -112,7 +112,6 @@ test('Telemetry Tab Displays Data', () => {
   expect(altitude).toBeInTheDocument();
   expect(latitude).toBeInTheDocument();
   expect(longitude).toBeInTheDocument();
-  expect(heading).toBeInTheDocument();
   expect(roll).toBeInTheDocument();
   expect(pitch).toBeInTheDocument();
   expect(yaw).toBeInTheDocument();
@@ -121,7 +120,6 @@ test('Telemetry Tab Displays Data', () => {
   expect(altitude).toHaveTextContent(mock_telemetry.altitude.toFixed(2).toString());
   expect(latitude).toHaveTextContent(mock_telemetry.latitude.toFixed(4).toString());
   expect(longitude).toHaveTextContent(mock_telemetry.longitude.toFixed(4).toString());
-  expect(heading).toHaveTextContent(mock_telemetry.heading.toFixed(4).toString());
   expect(roll).toHaveTextContent(mock_telemetry.roll.toFixed(4).toString());
   expect(pitch).toHaveTextContent(mock_telemetry.pitch.toFixed(4).toString());
   expect(yaw).toHaveTextContent(mock_telemetry.yaw.toFixed(4).toString());
@@ -130,7 +128,8 @@ test('Telemetry Tab Displays Data', () => {
 test('Test Unpinning Telemetry', () => {
   useWebSocket.mockReturnValue({
     telemetryData: mock_telemetry,
-    trackingData: { tracking: false, tracked_class: null }
+    trackingData: { tracking: false, tracked_class: null },
+    flightMode: 3
   });
   const propsWithPinned = {...mockProps, pinnedTelemetry: ['speed', 'altitude']};
   render(<InfoDashBoard {...propsWithPinned} />);
@@ -153,7 +152,8 @@ test('Test Unpinning Telemetry', () => {
 test('Test Pinning Telemetry', () => {
   useWebSocket.mockReturnValue({
     telemetryData: mock_telemetry,
-    trackingData: { tracking: false, tracked_class: null }
+    trackingData: { tracking: false, tracked_class: null },
+    flightMode: 3
   });
   const propsUnpinned = {...mockProps, pinnedTelemetry: []};
   render(<InfoDashBoard {...propsUnpinned} />);
@@ -199,7 +199,14 @@ test('Controls Tab Displays Controls', () => {
   expect(hudToggle).toBeInTheDocument();
 });
 
-test('Toggle Recording', async () => {
+test('Toggle Recording', () => {
+  // const mockSetIsRecording = jest.fn();
+  // useWebSocket.mockReturnValue({ 
+  //   isRecording: false, 
+  //   setIsRecording: mockSetIsRecording,
+  //   trackingData: { tracking: false, tracked_class: null },
+  //   flightMode: 3
+  // });
   axios.post.mockResolvedValue({ data: { is_recording: true } });
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();
@@ -282,7 +289,7 @@ test('Follow Distance Adjustment', () => {
   expect(mockProps.setFollowDistance).toHaveBeenLastCalledWith(20);
 });
 
-test('Flight Mode Selection', () => {
+test('Flight Mode Selection', async () => {
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();
 
@@ -294,17 +301,24 @@ test('Flight Mode Selection', () => {
   const flightModeSelect = screen.getByRole('combobox');
   expect(flightModeSelect).toBeInTheDocument();
 
-  // Check displayed text
-  expect(flightModeSelect).toHaveTextContent(mockProps.flightMode);
+  // Check that the current flight mode is displayed (mocked as 3 = 'Auto')
+  expect(screen.getByText('Auto')).toBeInTheDocument();
 
   // Open dropdown
   fireEvent.mouseDown(flightModeSelect);
 
-  // Select "Auto"
-  const autoOption = screen.getByRole('option', { name: 'Auto' });
-  fireEvent.click(autoOption);
-  // Assert that handler was called with correct value
-  expect(mockProps.setFlightMode).toHaveBeenLastCalledWith('Auto');
+  // Select "Loiter" (different from current mode)
+  const loiterOption = screen.getByRole('option', { name: 'Loiter' });
+  fireEvent.click(loiterOption);
+  
+  // Wait for async axios call to complete
+  await screen.findByText('Auto'); // Waits for re-render
+  
+  // Assert that axios.post was called with the correct flight mode value
+  expect(axios.post).toHaveBeenCalledWith(
+    'http://localhost:8766/setFlightMode',
+    { mode: 'Loiter' }
+  );
 });
 
 test('Toggle HUD Visibility Off', () => {

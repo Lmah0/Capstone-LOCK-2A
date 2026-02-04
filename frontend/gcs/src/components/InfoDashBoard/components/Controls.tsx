@@ -9,6 +9,7 @@ import StraightenIcon from '@mui/icons-material/Straighten';
 import FlightIcon from '@mui/icons-material/Flight';
 import StopIcon from '@mui/icons-material/Stop';
 import { convertDistance } from '../../../utils/unitConversions';
+import { flightModeMapping } from '@/utils/flightModeMapping';
 import { useWebSocket } from '@/providers/WebSocketProvider';
 import axios from 'axios';
 
@@ -21,12 +22,10 @@ interface ControlsProps {
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
     followDistance: number;
     setFollowDistance: React.Dispatch<React.SetStateAction<number>>;
-    flightMode: string;
-    setFlightMode: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance, flightMode, setFlightMode}: ControlsProps) {
-    const { trackingData } = useWebSocket();
+export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance}: ControlsProps) {
+    const { trackingData, flightMode} = useWebSocket();
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
@@ -74,7 +73,6 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     const handleFlightModeChange = async (event: any) => {
         try {
             const newFlightMode = event.target.value;
-            setFlightMode(newFlightMode);
             const resp = await axios.post(`http://localhost:8766/setFlightMode`, { mode: newFlightMode });
             if (resp.status !== 200) {
                 console.warn('Unexpected response setting flight mode:', resp);
@@ -94,15 +92,6 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
             console.error('Error sending stop following to backend:', error);
         }
     };
-
-    const flightModes = [
-        'Loiter',
-        'Manual',
-        'Fly By Wire A',
-        'Fly By Wire B',
-        'Auto',
-        'Guided'
-    ];
 
     return (
         <div className="w-full h-full p-4">
@@ -233,7 +222,7 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                     
                     <FormControl fullWidth size="small">
                         <Select
-                            value={flightMode}
+                            value={flightModeMapping[flightMode as unknown as number]}
                             onChange={handleFlightModeChange}
                             sx={{
                                 backgroundColor: 'rgba(55, 65, 81, 0.8)',
@@ -272,9 +261,9 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
                                 },
                             }}
                         >
-                            {flightModes.map((mode) => (
-                                <MenuItem key={mode} value={mode}>
-                                    {mode}
+                            {Object.entries(flightModeMapping).filter(([modeId]) => modeId !== '-1').map(([modeId, modeName]) => (
+                                <MenuItem key={modeId} value={modeName}>
+                                    {modeName}
                                 </MenuItem>
                             ))}
                         </Select>

@@ -43,7 +43,8 @@ beforeEach(() => {
     droneConnection: true,
     telemetryData: null,
     batteryData: null,
-    trackingData: { tracking: false, tracked_class: null }
+    trackingData: { tracking: false, tracked_class: null },
+    flightMode: 3
   });
   axios.post.mockResolvedValue({ status: 200, data: {} });
   axios.get.mockResolvedValue({ status: 200, data: [] });
@@ -54,8 +55,7 @@ const mockProps = {
   pinnedTelemetry: [],
   isMetric: true,
   followDistance: 10,
-  flightMode: 'Manual',
-  isRecording: false
+  flightMode: 3
 };
 
 const mock_telemetry = {
@@ -63,7 +63,6 @@ const mock_telemetry = {
   altitude: 1200,
   latitude: 37.7749,
   longitude: -122.4194,
-  heading: 90,
   roll: -1.5,
   pitch: 0.6,
   yaw: 2.5
@@ -75,7 +74,12 @@ const test_main_container = () => {
 }
 
 test('Disconnected Drone, Disconnected Server', async () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'disconnected', droneConnection: false, telemetryData: null});
+  useWebSocket.mockReturnValue({ 
+    connectionStatus: 'disconnected', 
+    droneConnection: false, 
+    telemetryData: null,
+    flightMode: 3
+  });
   render(<HUD {...mockProps} />);
 
   test_main_container();
@@ -98,7 +102,12 @@ test('Disconnected Drone, Disconnected Server', async () => {
 });
 
 test('Connected Drone, Connected Server', () => {
-  useWebSocket.mockReturnValue({connectionStatus: 'connected', droneConnection: true, telemetryData: null});
+  useWebSocket.mockReturnValue({
+    connectionStatus: 'connected', 
+    droneConnection: true, 
+    telemetryData: null,
+    flightMode: 3
+  });
   render(<HUD {...mockProps} />);
   test_main_container();
 
@@ -121,7 +130,12 @@ test('Connected Drone, Connected Server', () => {
 // });
 
 test('Pinned Telemetry in HUD Displays', () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'connected', droneConnection: true, telemetryData: mock_telemetry});
+  useWebSocket.mockReturnValue({ 
+    connectionStatus: 'connected', 
+    droneConnection: true, 
+    telemetryData: mock_telemetry,
+    flightMode: 3
+  });
   const telemetryProps = {
     ...mockProps,
     pinnedTelemetry: ['speed', 'altitude', 'latitude', 'longitude']
@@ -156,7 +170,8 @@ test('Check Follow Distance', () => {
     connectionStatus: 'disconnected', 
     droneConnection: false, 
     telemetryData: null,
-    trackingData: { tracking: true, tracked_class: 'person' }
+    trackingData: { tracking: true, tracked_class: 'person', distance_to_target: 19.8 },
+    flightMode: 3
   });
   render(<HUD {...mockProps} />);
   test_main_container();
@@ -166,17 +181,27 @@ test('Check Follow Distance', () => {
 });
 
 test('Check Flight Mode', () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'disconnected', droneConnection: false, telemetryData: null});
+  useWebSocket.mockReturnValue({ 
+    connectionStatus: 'disconnected', 
+    droneConnection: false, 
+    telemetryData: null,
+    flightMode: 3
+  });
   render(<HUD {...mockProps} />);
   test_main_container();
   
   const flightMode = document.getElementById('flight-mode');
   expect(flightMode).toBeInTheDocument();
-  expect(flightMode?.textContent).toBe('Manual');
+  expect(flightMode?.textContent).toBe('Auto');
 });
 
 test('Start Recording', () => {
-  useWebSocket.mockReturnValue({ connectionStatus: 'disconnected', droneConnection: false, telemetryData: null});
+  useWebSocket.mockReturnValue({ 
+    connectionStatus: 'disconnected', 
+    droneConnection: false, 
+    telemetryData: null, 
+    flightMode: 3
+  });
   const props = {...mockProps, isRecording: true};
   render(<HUD {...props} />);
   test_main_container();

@@ -45,7 +45,6 @@ class lock(mp_module.MPModule):
                                                                                     m.relative_alt/1000, m.vx/100, m.vy/100, m.vz/100, m.hdg/100)
                 self.lat = lat # Latitude
                 self.lon = lon # Longitude
-                self.alt = alt # Altitude (MSL)
                 self.rel_alt = relative_alt # Altitude above home
                 self.dlat = dlat # Ground X speed (Latitude, positive north)
                 self.dlon = dlon # Ground y Speed (Longitude, positive east)
@@ -63,7 +62,7 @@ class lock(mp_module.MPModule):
             
     def send_data(self):
         t = time.time()
-        heartbeat_data = (t, self.lat, self.lon, self.rel_alt, self.alt, self.roll, self.pitch, self.yaw, 
+        heartbeat_data = (t, self.lat, self.lon, self.rel_alt, self.roll, self.pitch, self.yaw, 
                           self.dlat, self.dlon, self.dalt, self.heading, self.flight_mode)
 
         heartbeat_message = f"{heartbeat_data}".encode()

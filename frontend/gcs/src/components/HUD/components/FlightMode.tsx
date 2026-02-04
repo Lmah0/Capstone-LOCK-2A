@@ -3,16 +3,15 @@ import { Paper, Typography, Box } from "@mui/material";
 import FlightIcon from '@mui/icons-material/Flight';
 import { formatUnits } from "../../../utils/unitConversions";
 import { useWebSocket } from "../../../providers/WebSocketProvider";
+import { flightModeMapping } from "@/utils/flightModeMapping";
 
 interface FlightModeProps {
     isMetric: boolean;
     followDistance: number;
-    flightMode: string;
 }
 
-export default function FlightMode({ isMetric, followDistance, flightMode }: FlightModeProps) {
-    const distanceToTarget = 19.8;
-    const { trackingData } = useWebSocket();
+export default function FlightMode({ isMetric, followDistance }: FlightModeProps) {
+    const { trackingData, flightMode } = useWebSocket();
 
     return (
         <Paper
@@ -33,7 +32,7 @@ export default function FlightMode({ isMetric, followDistance, flightMode }: Fli
             <Box className="flex items-center gap-1.5">
                 <FlightIcon sx={{ color: '#3b82f6', fontSize: 30 }} />
                 <Typography id='flight-mode' className="text-white font-bold">
-                    {flightMode}
+                    {flightModeMapping[flightMode as unknown as number]}
                 </Typography>
             </Box>
 
@@ -49,7 +48,7 @@ export default function FlightMode({ isMetric, followDistance, flightMode }: Fli
                     </Box>
                     <Box className="flex items-center gap-1">
                         <Typography id='dist-to-target' variant="body2" className="text-neutral-300">
-                            Target: {formatUnits.distance(distanceToTarget, isMetric)}
+                            Target: {formatUnits.distance(trackingData?.distance_to_target, isMetric)}
                         </Typography>
                     </Box>
                 </Box>

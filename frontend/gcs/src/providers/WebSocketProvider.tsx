@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
-import { TelemetryData } from '@/utils/telemetryConfig';
+import { TelemetryData, trackingData } from '@/utils/telemetryConfig';
+import axios from 'axios';
 
 interface WebSocketContextType {
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -9,6 +10,7 @@ interface WebSocketContextType {
   batteryData: any;
   droneConnection: boolean;
   trackingData: any;
+  flightMode: Number;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -30,7 +32,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [telemetryData, setTelemetryData] = useState<TelemetryData | null>(null);
   const [batteryData, setBatteryData] = useState<any>(null);
   const [droneConnection, setDroneConnection] = useState<boolean>(false);
-  const [trackingData, setTrackingData] = useState<any>({ tracking: false, tracked_class: null });
+  const [trackingData, setTrackingData] = useState<trackingData | null>(null);
+  const [flightMode, setFlightMode] = useState<Number>(-1);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const droneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,14 +77,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
           // Update telemetry data
           setTelemetryData({ 
-              speed: data.speed,
+              speed: Math.sqrt((data.dlat ** 2) + (data.dlon ** 2) + (data.dalt ** 2)),
               altitude: data.altitude,
               latitude: data.latitude,
               longitude: data.longitude,
-              heading: data.heading,
               roll: data.roll,
               pitch: data.pitch,
               yaw: data.yaw });
+
+          setFlightMode(data.flight_mode);
           
           if (data.battery_voltage && data.battery_remaining) {
             setBatteryData({
@@ -92,7 +96,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);
-          setTrackingData({ tracking: data.tracking, tracked_class: data.tracked_class })
+          setTrackingData({ tracking: data.tracking, tracked_class: data.tracked_class, distance_to_target: data.distance_to_target })
 
           // Reset drone connection timeout - if we don't receive data for 5 seconds, mark as disconnected
           if (droneTimeoutRef.current) {
@@ -154,7 +158,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     telemetryData, 
     batteryData, 
     droneConnection,
-    trackingData
+    trackingData,
+    flightMode
   };
 
   return (
