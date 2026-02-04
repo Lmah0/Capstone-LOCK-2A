@@ -14,7 +14,7 @@ import cv2
 import time
 import numpy as np
 from database import get_all_objects, delete_object, record_telemetry_data
-from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
+from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame, TELEMETRY_RECORDER
 from dotenv import load_dotenv
 from GeoLocate import calculate_distance
 from webrtc import webrtc_router, write_frame, get_peer_connections
@@ -129,6 +129,9 @@ async def video_streaming_task():
                                 "flight_mode":-1,
                                 "battery_remaining":-1,
                                 "battery_voltage":-1,
+                                "altitude" : -1,
+                                "timestamp" : -1,
+                                "speed" : -1
                         }
 
             # --- If live video and mock both fail then sleep and retry ---
@@ -278,34 +281,24 @@ def delete_object_endpoint(object_id: str):
     except Exception:
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
-@app.post("/record")
-async def record(request: dict = Body(...)):
-    """Record tracked object data"""
-    data = request.get("data")
-    if not data:
-        raise HTTPException(status_code=400, detail="Missing 'data'")
-
-    required_fields = ("timestamp", "latitude", "longitude")
-    # Validate point data
-    for idx, point in enumerate(data):
-        missing = [f for f in required_fields if point.get(f) is None]
-        if missing:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Missing fields {missing} in data point at index {idx}",
-            )
-
-    try:
-        # Get classification name if tracking, otherwise use "unknown"
-        classification = "unknown"
-        if STATE.tracked_class is not None:
-            classification = ENGINE.model.names[STATE.tracked_class]
-
-        record_telemetry_data(data, classification=classification)
-        return {"status": 200, "message": "Data recorded successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
-
+@app.post("/recording")
+def toggle_recording():
+    if TELEMETRY_RECORDER.is_recording:
+        tracked_obj_data = TELEMETRY_RECORDER.stop_and_get_data()
+        if tracked_obj_data:
+            try:
+                classification = "unknown"
+                if STATE.tracked_class is not None:
+                    classification = ENGINE.model.names[STATE.tracked_class]
+                record_telemetry_data(tracked_obj_data, classification=classification)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to save recording data: {str(e)}"
+                )
+        return {"is_recording": False}
+    TELEMETRY_RECORDER.start()
+    return {"is_recording": True}
 
 # -- Flight Computer Communication Endpoints --
 @app.post("/setFollowDistance")

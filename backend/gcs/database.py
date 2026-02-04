@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import boto3
 import os
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from typing import Dict, Any, List
 
@@ -57,7 +57,7 @@ def record_telemetry_data(data: List[Dict[str, Any]], classification: str = 'Unk
     object_positions = []
     for point in data:
         obj_position = {
-            'ts': datetime.fromtimestamp(point['timestamp']).isoformat() + 'Z',
+            'ts': datetime.fromtimestamp(point['timestamp'], tz=timezone.utc).isoformat(),
             'lat': Decimal(str(point.get('latitude', 0))),
             'lon': Decimal(str(point.get('longitude', 0))),
             'alt': Decimal(str(point.get('altitude', 0))),

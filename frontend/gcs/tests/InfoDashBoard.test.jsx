@@ -199,14 +199,7 @@ test('Controls Tab Displays Controls', () => {
   expect(hudToggle).toBeInTheDocument();
 });
 
-test('Toggle Recording', () => {
-  // const mockSetIsRecording = jest.fn();
-  // useWebSocket.mockReturnValue({ 
-  //   isRecording: false, 
-  //   setIsRecording: mockSetIsRecording,
-  //   trackingData: { tracking: false, tracked_class: null },
-  //   flightMode: 3
-  // });
+test('Toggle Recording', async () => {
   axios.post.mockResolvedValue({ data: { is_recording: true } });
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();

@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
-from threading import Lock
 
 class CursorHandler:
     """Handles cursor position and click events from user"""
@@ -41,51 +40,34 @@ class TrackingConfig:
 
 class TelemetryRecorder:
     def __init__(self):
-        self.recording_interval = 5
-        self._interval_counter = 0
-
         self.is_recording = False
         self.recorded_data = []
 
     def start(self):
         self.is_recording = True
-        self._interval_counter = 0
         self.recorded_data.clear()
 
-    def stop(self):
+    def stop_and_get_data(self):
         self.is_recording = False
         return self.recorded_data
 
-    def record_telemetry(self, data: dict, tracking: bool):
+    def get_is_recording(self):
+        return self.is_recording
+
+    def record_telemetry(self, data: dict):
         """
-        Record telemetry only if:
+        Record telemetry only called when:
         - recording enabled
         - tracking enabled
-        - interval threshold reached
         """
-        if not self.is_recording or not tracking:
-            return
-        
-        # Record every 5th data point
-        self._interval_counter += 1
-        if self._interval_counter < self.recording_interval:
-            return
-
-        self._interval_counter = 0
-
-        try:
-            point = {
-                "timestamp": data["timestamp"],
-                "latitude": float(data["latitude"]),
-                "longitude": float(data["longitude"]),
-                "altitude": float(data["altitude"]),
-                "speed": float(data["speed"]),
-                "heading": float(data["heading"]),
-            }
-        except (KeyError, TypeError, ValueError) as e:
-            print(f"Telemetry Recorder. Invalid data format: {e}")
-            return  # Missing or invalid data → skip
-
+        point = {
+            "timestamp": data["timestamp"],
+            "latitude": float(data["latitude"]),
+            "longitude": float(data["longitude"]),
+            "altitude": float(data["altitude"]),
+            "speed": float(data["speed"]),
+            "heading": float(data["heading"]),
+        }
         self.recorded_data.append(point)
 
 def _init_tracker_config():

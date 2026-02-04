@@ -109,6 +109,11 @@ async def process_frame(frame, metadata, cursor_pos=None, click_pos=None):
                 STATE.last_target_lat = target_lat
                 STATE.last_target_lon = target_lon
                 
+                if (TELEMETRY_RECORDER.get_is_recording()): 
+                    metadata['longitude'] = target_lon
+                    metadata['latitude'] = target_lat
+                    TELEMETRY_RECORDER.record_telemetry(metadata)
+
                 print(f"Target Found at relative latitude, longitude: {target_lat}, {target_lon}")
         
         # Return annotated frame or original if no annotation
