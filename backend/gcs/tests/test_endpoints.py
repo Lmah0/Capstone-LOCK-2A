@@ -78,10 +78,13 @@ async def test_delete_object_endpoint_not_found(async_client):
 async def test_record_endpoint_success(async_client):
     mock_recording = MagicMock()
     mock_recording.is_recording = False
-    with patch("server.TELEMETRY_RECORDER", mock_recording):
+
+    with patch("server.TELEMETRY_RECORDER", mock_recording), \
+         patch("server.record_telemetry_data"):
+
+        # ---- START RECORDING ----
         def fake_start():
             mock_recording.is_recording = True
-            mock_recording.started_at = 100.0
         mock_recording.start.side_effect = fake_start
 
         start_response = await async_client.post("/recording")
@@ -89,10 +92,16 @@ async def test_record_endpoint_success(async_client):
         assert start_response.json()["is_recording"] is True
         mock_recording.start.assert_called_once()
 
-        mock_recording.stop.return_value = [{"id": "64dbbe66-7117-4f2a-b7db-58a407588682", "class": "person"}]
+        # ---- STOP RECORDING ----
+        def fake_stop_and_get_data():
+            mock_recording.is_recording = False
+            return [{"id": "64dbbe66-7117-4f2a-b7db-58a407588682","class": "person",}]
+        mock_recording.stop_and_get_data.side_effect = fake_stop_and_get_data
+
         stop_response = await async_client.post("/recording")
         assert stop_response.status_code == 200
-        mock_recording.stop.assert_called_once()
+        assert stop_response.json()["is_recording"] is False
+        mock_recording.stop_and_get_data.assert_called_once()
 
 # ------------------ Flight Mode Tests ------------------
 @pytest.mark.asyncio
