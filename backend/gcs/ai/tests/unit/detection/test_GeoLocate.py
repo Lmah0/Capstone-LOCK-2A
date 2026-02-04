@@ -5,11 +5,11 @@ Tests the geolocation calculation functionality
 
 import sys
 import os
+from pathlib import Path
 
-# Add Detection/Spike_2.0 to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../Detection/Spike_2.0'))
+root = Path(__file__).resolve().parents[6]
+sys.path.insert(0, str(root))
 from backend.gcs.GeoLocate import locate, CAM_FOV, IMG_WIDTH_PX, IMG_HEIGHT_PX
-
 
 class TestGeoLocate:
     """Sanity tests for GeoLocate module"""
