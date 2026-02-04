@@ -1,23 +1,24 @@
 """Flight Computer Server running on the raspberry pi onboard the drone."""
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import json
-import random
 from contextlib import asynccontextmanager
 from typing import List
-import os
+from sendVideoStream import start_streaming_video_and_telemetry
 from dotenv import load_dotenv
-import datetime
 import threading
 import socket
+import time
+from mavlinkMessages.mode import set_mode
 import time
 from mavlinkMessages.mode import set_mode
 from mavlinkMessages.connect import connect_to_vehicle, verify_connection
 from mavlinkMessages.commandToLocation import move_to_location
 
-load_dotenv(dotenv_path="../../../.env")
+load_dotenv(dotenv_path="../../.env")
 
 active_connections: List[WebSocket] = []
 
@@ -54,6 +55,7 @@ async def lifespan(app: FastAPI):
     print(f"Attempting to connect to vehicle on: {vehicle_ip}")
     vehicle_connection = connect_to_vehicle(vehicle_ip)
     print("Vehicle connection established.")
+
     try:
         is_connected = verify_connection(vehicle_connection)
         if is_connected:
@@ -66,7 +68,14 @@ async def lifespan(app: FastAPI):
 
     if (vehicle_connection is None):
         print("Vehicle connection is None, exiting...")
-        exit(1)
+        # exit(1)
+
+    video_and_telemetry_thread = threading.Thread(
+        target=start_streaming_video_and_telemetry, args=(return_telemetry_data,), daemon=True
+    )
+    video_and_telemetry_thread.start()
+    print("Video streaming thread started")
+    time.sleep(0.5)  # Give some time for the thread to start
     
     background_task = asyncio.create_task(send_telemetry_data())
     yield
@@ -77,7 +86,6 @@ async def lifespan(app: FastAPI):
             await background_task
         except asyncio.CancelledError:
             pass
-
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
@@ -96,12 +104,20 @@ async def send_data_to_connections(message: dict):
             if websocket in active_connections:
                 active_connections.remove(websocket)
 
+
 async def send_telemetry_data():
     global basic_telemetry
     while True:
         with basic_telemetry_lock:
             await send_data_to_connections(basic_telemetry)
         await asyncio.sleep(1)
+
+
+def return_telemetry_data():
+    global basic_telemetry
+    with basic_telemetry_lock:
+        return basic_telemetry.copy()
+
 
 def setFlightMode(mode: str):
     """Set the flight mode of the drone"""
@@ -116,6 +132,7 @@ def setFlightMode(mode: str):
     except Exception as e:
         print(f"Failed to set flight mode: {e}")
         raise RuntimeError(f"Failed to set flight mode: {e}")
+
 
 def setFollowDistance(distance: float):
     # TODO: Deferring the implementation of this until later
@@ -145,6 +162,7 @@ def moveToLocation(location):
     except Exception as e:
         raise RuntimeError(f"Failed to move to location: {e}")
 
+
 @app.websocket("/ws/flight-computer")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for GCS frontend to send commands and receive telemetry"""
@@ -152,7 +170,7 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()    
+            data = await websocket.receive_text()
             msg = json.loads(data)
             cmd = msg.get("command")
             # Handle commands

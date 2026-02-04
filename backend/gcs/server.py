@@ -1,39 +1,48 @@
-""" Main server for Ground Control Station (GCS) backend. """
+"""Main server for Ground Control Station (GCS) backend."""
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import json
-import websockets
 import traceback
 from contextlib import asynccontextmanager
 from typing import List
 import os
+import websockets
 import cv2
 import time
 import numpy as np
 from database import get_all_objects, delete_object, record_telemetry_data
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
 from dotenv import load_dotenv
-from GeoLocate import calculate_distance
+from GeoLocate import calculate_horizontal_distance
 from webrtc import webrtc_router, write_frame, get_peer_connections
+from receiveVideoStream import VideoStreamReceiver
+import threading
 
 load_dotenv(dotenv_path="../../.env")
 
-VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai', 'video.mp4')
+VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai", "video.mp4")
 
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
 
-flight_comp_url = "ws://10.13.58.79:5555/ws/flight-computer"
+# Video stream configuration
+GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
+STREAM_URL = "udp://"+ os.getenv(
+        "FLIGHT_COMP_IP", "192.168.1.66")+":" + str(GCS_VIDEO_PORT)  # Video from drone
+FLIGHT_COMP_URL = f"ws://{os.getenv('FLIGHT_COMP_IP')}:{os.getenv('RPI_BACKEND_PORT', '5555')}/ws/flight-computer"
+newest_telemetry = {}
+
+telemetry_event = asyncio.Event()
 
 async def flight_computer_background_task():
     """Background task that connects to flight computer and listens for telemetry"""
     global flight_comp_ws
-
     while True:
         try:
-            async with websockets.connect(flight_comp_url) as ws:
+            async with websockets.connect(FLIGHT_COMP_URL) as ws:
                 flight_comp_ws = ws
                 print("Connected to flight computer")   
                 async for message in ws:
@@ -50,7 +59,7 @@ async def flight_computer_background_task():
                             drone_lat = data.get("latitude")
                             drone_lon = data.get("longitude")
                             if drone_lat is not None and drone_lon is not None:
-                                distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
+                                distance_meters = calculate_horizontal_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
                                 data["distance_to_target"] = distance_meters
                             else:
                                 data["distance_to_target"] = None
@@ -60,59 +69,112 @@ async def flight_computer_background_task():
                         await send_data_to_connections(data)
                     except json.JSONDecodeError:
                         continue
-
         except Exception as e:
             print(f"Flight computer connection error: {e}, retrying in 5s")
             flight_comp_ws = None
             await asyncio.sleep(5)
 
+
+video_stop_event = threading.Event()
+video_receiver = VideoStreamReceiver(STREAM_URL)
+
+
 async def video_streaming_task():
-    """Background task that reads video, processes through AI, and writes to frame buffer"""
-    cap = cv2.VideoCapture(VIDEO_PATH)
-    if not cap.isOpened():
-        print(f"ERROR: Could not open video file: {VIDEO_PATH}")
-        return
-    
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    frame_delay = 1.0 / fps
+    """Background task that reads video, processes through AI, and streams via WebRTC"""
+    print("Starting receive video stream background task...")
+    global newest_telemetry
+    # Start Live Receiver
+    video_receiver.start()
+    # Target 60 FPS for the loop
+    target_interval = 1.0 / 60.0
+
     try:
-        while True:
-            frame_start = time.time()
-            ret, frame = cap.read()    
-            if not ret:
-                # Loop video
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        while not video_stop_event.is_set():
+            loop_start = time.time()
+
+            # --- Try Reading Live Stream ---
+            frame, metadata = video_receiver.read()
+
+            # --- Fallback Logic ---
+            if frame is None:
+                # Open Local Video File (Fallback)
+                cap = cv2.VideoCapture(VIDEO_PATH)
+                fallback_available = cap.isOpened()
+                if not fallback_available:
+                    print(f"WARNING: Could not open fallback video: {VIDEO_PATH}")
+                if fallback_available:
+                    ret, file_frame = cap.read()
+
+                    # Handle End of File (Loop video)
+                    if not ret:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        ret, file_frame = cap.read()
+
+                    if ret:
+                        frame = file_frame
+                        # Inject dummy metadata
+                        metadata = {
+                                "last_time": -1,
+                                "latitude":-1,
+                                "longitude":-1,
+                                "rth_altitude":-1,
+                                "dlat":-1,
+                                "dlon":-1,
+                                "dalt":-1,
+                                "heading":-1,
+                                "roll":-1,
+                                "pitch":-1,
+                                "yaw":-1,
+                                "flight_mode":-1,
+                                "battery_remaining":-1,
+                                "battery_voltage":-1,
+                        }
+
+            # --- If live video and mock both fail then sleep and retry ---
+            if frame is None:
+                await asyncio.sleep(0.1)
                 continue
             
-            # Process frame through AI
-            cursor = CURSOR_HANDLER.cursor_pos
-            click = CURSOR_HANDLER.click_pos
-            
-            annotated_frame = await process_frame(frame, cursor, click)
+            newest_telemetry = metadata # Update newest telemetry for flight computer task
+            telemetry_event.set() # Notify flight_computer_background_task new telemetry is available
 
-            if click is not None:
-                CURSOR_HANDLER.clear_click()
-                print("Click cleared")
-        
-            # Write latest frame to buffer for WebRTC
-            if annotated_frame is not None:
-                write_frame(annotated_frame)
-            
-            # Maintain video FPS
-            elapsed = time.time() - frame_start
-            sleep_time = max(0, frame_delay - elapsed)
-            if sleep_time > 0:
-                await asyncio.sleep(sleep_time)
-            
+            # --- D. AI Processing (Common for both sources) ---
+            try:
+                # Get Cursor/Click data
+                cursor = CURSOR_HANDLER.cursor_pos
+                click = CURSOR_HANDLER.click_pos
+
+                # Run AI (Wait for result)
+                annotated_frame = await process_frame(frame, metadata, cursor, click)
+
+                if click is not None:
+                    CURSOR_HANDLER.clear_click()
+                    print("Click cleared")
+
+                # Send to WebRTC
+                if annotated_frame is not None:
+                    write_frame(annotated_frame)
+
+            except Exception as e:
+                print(f"Error processing frame: {e}")
+                traceback.print_exc()
+
+            # --- E. Rate Limiting ---
+            # Calculates how much time is left in the 1/60th second window
+            elapsed = time.time() - loop_start
+            sleep_time = max(0, target_interval - elapsed)
+            await asyncio.sleep(sleep_time)
+
     except asyncio.CancelledError:
-        print("Video streaming task cancelled")
-        raise
-    except Exception as e:
-        print(f"Video streaming error: {e}")
-        traceback.print_exc()
+        print("Video streaming task cancelled.")
+
     finally:
-        cap.release()
-        print("Video capture released")
+        # Cleanup both sources
+        print("Stopping video sources...")
+        video_receiver.stop()
+        if cap.isOpened():
+            cap.release()
+    print("Video streaming task ended.")
 
 async def follows_background_task():
     """Background task that manages following target logic"""
@@ -142,6 +204,8 @@ async def lifespan(app: FastAPI):
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+
+    video_stop_event.set() # Stop video receiver thread
     
     # Close WebRTC peer connections
     peer_connections = get_peer_connections()
@@ -150,6 +214,7 @@ async def lifespan(app: FastAPI):
         return_exceptions=True
     )
     peer_connections.clear()
+
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -164,7 +229,9 @@ app.add_middleware(
 app.include_router(webrtc_router)
 
 # -- Websocket communication --
-async def send_data_to_connections(message: dict, websockets_list: List[WebSocket] = active_connections):
+async def send_data_to_connections(
+    message: dict, websockets_list: List[WebSocket] = active_connections
+):
     """Send message to all connected WebSocket clients"""
     for websocket in websockets_list:
         try:
@@ -173,20 +240,19 @@ async def send_data_to_connections(message: dict, websockets_list: List[WebSocke
             if websocket in websockets_list:
                 websockets_list.remove(websocket)
 
+
 async def send_to_flight_comp(message: dict):
     """Send a JSON command to the flight computer."""
     global flight_comp_ws
     if flight_comp_ws is None:
         raise RuntimeError("Flight computer not connected")
-    
+
     try:
         await flight_comp_ws.send(json.dumps(message))
     except Exception as e:
         print(f"Failed to send to flight comp: {e}")
         flight_comp_ws = None
         raise
-
-# -- Websocket communication --
 
 # -- Database Endpoints --
 @app.get("/objects")
@@ -195,7 +261,9 @@ def get_all_objects_endpoint():
     try:
         return get_all_objects()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve objects: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve objects: {str(e)}"
+        )
 
 @app.delete("/delete/object/{object_id}")
 def delete_object_endpoint(object_id: str):
@@ -206,7 +274,7 @@ def delete_object_endpoint(object_id: str):
             return {"status": 200}
         else:
             raise HTTPException(status_code=500, detail="Failed to delete object")
-    except Exception :
+    except Exception:
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
 @app.post("/record")
@@ -221,20 +289,22 @@ async def record(request: dict = Body(...)):
     for idx, point in enumerate(data):
         missing = [f for f in required_fields if point.get(f) is None]
         if missing:
-            raise HTTPException(status_code=400, detail=f"Missing fields {missing} in data point at index {idx}")
-    
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing fields {missing} in data point at index {idx}",
+            )
+
     try:
         # Get classification name if tracking, otherwise use "unknown"
         classification = "unknown"
         if STATE.tracked_class is not None:
             classification = ENGINE.model.names[STATE.tracked_class]
-        
+
         record_telemetry_data(data, classification=classification)
         return {"status": 200, "message": "Data recorded successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
 
-# -- Database Endpoints --
 
 # -- Flight Computer Communication Endpoints --
 @app.post("/setFollowDistance")
@@ -247,7 +317,10 @@ async def set_follow_distance(request: dict = Body(...)):
         await send_data_to_connections({"command": "set_follow_distance", "distance": distance}, flight_comp_ws)
         return {"status": 200, "message": f"Follow distance set to {distance} meters"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to set follow distance: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to set follow distance: {str(e)}"
+        )
+
 
 @app.post("/setFlightMode")
 async def set_flight_mode(request: dict = Body(...)):
@@ -271,9 +344,10 @@ async def stop_following():
         await send_data_to_connections({"command": "stop_following"}, flight_comp_ws)
         return {"status": 200, "message": "Stopped following the target."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to stop following: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to stop following: {str(e)}"
+        )
 
-# -- Flight Computer Communication Endpoints --
 
 @app.websocket("/ws/gcs")
 async def websocket_endpoint(websocket: WebSocket):
@@ -294,7 +368,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     print(f"Registered click at ({data.get('x')}, {data.get('y')})")
 
             except json.JSONDecodeError:
-                pass  # Just keep connection alive if not valid JSON
+                pass
 
     except WebSocketDisconnect:
         print(f"Client disconnected.")
@@ -307,6 +381,7 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
+
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv('GCS_BACKEND_PORT')), reload=False)

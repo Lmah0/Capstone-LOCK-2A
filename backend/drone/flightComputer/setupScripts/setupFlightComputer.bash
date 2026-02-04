@@ -27,6 +27,29 @@ mkdir -p $LOCK2A_DIR
 # Navigate to LOCK2A
 cd $LOCK2A_DIR || { echo "Failed to access LOCK2A"; exit 1; }
 
+echo "Updating system and installing GStreamer dependencies..."
+sudo apt-get update
+sudo apt-get install -y \
+    python3-dev \
+    python3-gi \
+    python3-gst-1.0 \
+    libgstreamer1.0-0 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    gstreamer1.0-tools \
+    gstreamer1.0-x \
+    gstreamer1.0-alsa \
+    gstreamer1.0-gl \
+    gstreamer1.0-gtk3 \
+    gstreamer1.0-qt5 \
+    gstreamer1.0-pulseaudio \
+    libgirepository1.0-dev \
+    libcairo2-dev \
+    pkg-config
+
 # Clone capstone repo 
 if [ ! -d "Capstone-LOCK-2A" ]; then
     echo "Cloning repository..."
@@ -52,6 +75,7 @@ source "$VENV_NAME/bin/activate"
 echo "Installing dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install pycairo PyGObject
 
 # Setup .bashrc file
 echo "Setting up .bashrc..."

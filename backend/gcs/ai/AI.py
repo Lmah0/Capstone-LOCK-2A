@@ -63,7 +63,7 @@ def print_fps():
 
 print("AI Processor initialized, ready to process frames...")
 
-async def process_frame(frame, cursor_pos=None, click_pos=None):
+async def process_frame(frame, metadata, cursor_pos=None, click_pos=None):
     """Process a single frame through the AI pipeline and return the annotated frame"""
     try:
         await asyncio.sleep(0)  # Yield for cooperative multitasking
@@ -89,13 +89,12 @@ async def process_frame(frame, cursor_pos=None, click_pos=None):
             # Geolocation processing - only run every N frames to reduce computational load
             if tracking_succeeded and STATE.frame_count % 5 == 0:
                 x, y, w, h = STATE.tracked_bbox
-                
-                # TODO: Get telemetry from frame metadata or flight computer
-                current_alt = 10.0 
-                current_lat = 50
-                current_lon = 100
-                heading = 0
-                
+
+                current_alt = metadata["altitude"]
+                current_lat = metadata["latitude"]
+                current_lon = metadata["longitude"]
+                heading = metadata["heading"]
+
                 # --- Calculate Target Location ---
                 image_center_x = frame.shape[1] / 2
                 image_center_y = frame.shape[0] / 2

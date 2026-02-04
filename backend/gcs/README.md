@@ -11,6 +11,10 @@ The GCS backend serves as the central relay hub between the flight computer and 
 **Purpose**: Centralized database operations for DynamoDB integration
 
 ---
+## Ports in Use
+- `Port 5000 (GCS_VIDEO_PORT)` - Used for receiving video and telemetry from flight computer that's being sent via GStreamer
+- `Port 8766 (GCS_BACKEND_PORT)` - Used for communication between frontend and backend
+---
 
 ### **Data Flow Architecture**
 
@@ -25,8 +29,7 @@ Flight Computer → GCS Backend → GCS Frontend
 
 
 ## videoStreaming
-- `receiveVideoStream.py` - Python file used for receiving a video stream over UDP. Also, provides the ability to benchmark FFMPEG and video quality of the stream.
-- `benchmarkVideoStream.py` - Python file containing helper functions to benchmark FFMPEG stream and video quality.
+- `receiveVideoStream.py` - Python file used for receiving a video stream over UDP. Also, provides the ability to benchmark video stream.
 
 ---
 
