@@ -64,7 +64,7 @@ def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearin
     (obj_latitude, obj_longitude) = (g['lat2'], g['lon2'])
     return (obj_latitude, obj_longitude)
 
-def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+def calculate_horizontal_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Calculate the geodesic distance between two GPS coordinates.
     
