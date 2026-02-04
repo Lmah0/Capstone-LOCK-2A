@@ -75,7 +75,7 @@ async def test_delete_object_endpoint_not_found(async_client):
 
 # ------------------ Record Endpoint Tests ------------------
 @pytest.mark.asyncio
-async def test_record_endpoint_missing_data(async_client):
+async def test_record_endpoint_success(async_client):
     mock_recording = MagicMock()
     mock_recording.is_recording = False
     with patch("server.TELEMETRY_RECORDER", mock_recording):

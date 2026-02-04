@@ -345,6 +345,9 @@ def process_detection_mode(frame, model, state, cursor_pos, click_pos):
                 output_frame = cv2.addWeighted(overlay, 0.3, output_frame, 0.7, 0)
                 
                 class_id = int(classes[i])
+                class_name = model.names[class_id]
+                cv2.putText(output_frame, class_name, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 # Click = start tracking
                 if click_pos is not None:
