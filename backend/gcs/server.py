@@ -180,6 +180,12 @@ async def follows_background_task():
     """Background task that manages following target logic"""
     while True:
         if STATE.tracking:
+            if newest_telemetry['mode'] != "Guided":
+                print("Attempting to enter follows mode...")
+                await send_data_to_connections({"command": "set_flight_mode", "mode": "Guided"}, flight_comp_ws)
+                await asyncio.sleep(2) # Wait for mode change (delay on ArduPilot's side)
+                print("Entered Guided mode for follows.")
+
             follows_altitude = 15.0 # Hard coding the follows altitude to 15 meters (50 ft) for now
             if STATE.last_target_lat is not None and STATE.last_target_lon is not None:
                 try:
