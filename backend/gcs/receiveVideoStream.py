@@ -10,7 +10,7 @@ from datetime import datetime
 # --- CONFIGURATION ---
 GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
 STREAM_URL = "udp://0.0.0.0:" +  str(GCS_VIDEO_PORT) + "?overrun_nonfatal=1&fifo_size=10000"
-
+DISPLAY_WITH_OVERLAY = True
 # Reduce log noise
 av.logging.set_level(av.logging.PANIC)
 
@@ -29,6 +29,11 @@ class VideoStreamReceiver:
             "error": "Waiting for stream...",
             "latency_ms": None,
         }
+        
+        # Recording
+        self.recording = False
+        self.video_writer = None
+        self.record_filename = None
 
     def start(self):
         if self.running:
@@ -43,6 +48,28 @@ class VideoStreamReceiver:
         if self.thread:
             print("Stopping background thread...")
             self.thread.join()
+        self.stop_recording()
+
+    def start_recording(self, filename="recorded.mp4", fps=60, resolution=(1280, 720)):
+        """Start recording frames to a video file."""
+        if self.recording:
+            print("Already recording!")
+            return
+        
+        self.record_filename = filename
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.video_writer = cv2.VideoWriter(filename, fourcc, fps, resolution)
+        self.recording = True
+        print(f"Started recording to {filename}")
+    
+    def stop_recording(self):
+        """Stop recording and release the video writer."""
+        if self.recording and self.video_writer:
+            self.recording = False
+            self.video_writer.release()
+            print(f"Recording saved to {self.record_filename}")
+            self.video_writer = None
+            self.record_filename = None
 
     def update_loop(self):
         """Background loop: Reads packets continuously."""
@@ -62,14 +89,12 @@ class VideoStreamReceiver:
                             "probesize": "32",
                             "analyzeduration": "0",
                             "reorder_queue_size": "0",
-                            "max_delay": "0",  # Don't wait for packets
-                            "timeout": "2000000",    # For TCP/General
-                            "rw_timeout": "2000000"  # For UDP/RTSP usually
+                            "max_delay": "0",
+                            "timeout": "2000000",
+                            "rw_timeout": "2000000"
                         },
                     )
-                    container.streams.video[0].thread_type = (
-                        "AUTO"  # Multi-threaded decode
-                    )
+                    container.streams.video[0].thread_type = "AUTO"
                     print("Stream Connected.")
 
                 # Demux Packets
@@ -105,12 +130,16 @@ class VideoStreamReceiver:
     
                                 with self.lock:
                                     self.latest_frame = img
+                                
+                                # Write to file if recording
+                                if self.recording and self.video_writer:
+                                    self.video_writer.write(img)
+                                    
                         except (av.FFmpegError, OSError, ValueError) as e:
                             print(f"Video Decode Error: {e}. Continuing...")
                             continue
     
             except (av.FFmpegError, OSError) as e:
-                # This outer block now only catches major network failures (like timeout)
                 print(f"Critical Stream Error: {e}. Retrying in 2s...")
                 if container:
                     container.close()
@@ -139,7 +168,9 @@ def display_video_stream():
 
     # Wait for connection
     time.sleep(1)
-    print("Starting Display... Press 'q' to quit.")
+    print("Starting Display...")
+    print("Press 'r' to start/stop recording")
+    print("Press 'q' to quit")
 
     try:
         while True:
@@ -147,13 +178,10 @@ def display_video_stream():
             frame, ts_info = receiver.read()
 
             if frame is None:
-                time.sleep(0.01)  # Don't hog CPU if no video yet
+                time.sleep(0.01)
                 continue
 
-            # --- Draw Info Box ---
             display_frame = frame.copy()
-            cv2.rectangle(display_frame, (0, 0), (450, 140), (0, 0, 0), -1)
-            cv2.rectangle(display_frame, (0, 0), (450, 140), (0, 255, 0), 2)
 
             # --- Extract Data ---
             frame_num = ts_info.get("frame_number", "N/A")
@@ -161,60 +189,89 @@ def display_video_stream():
             latency = ts_info.get("latency_ms")
             receive_time = ts_info.get("receive_time")
 
-
-            # Display Text
-            cv2.putText(
-                display_frame,
-                f"Frame: {frame_num}",
-                (20, 35),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2,
-            )
-
-            if wall_time:
-                dt = datetime.fromtimestamp(wall_time)
-                time_str = dt.strftime("%H:%M:%S.%f")[:-3]
+            if DISPLAY_WITH_OVERLAY:
+                # Draw Info Box 
+                box_height = 180 if receiver.recording else 150
+                cv2.rectangle(display_frame, (0, 0), (450, box_height), (0, 0, 0), -1)
+                cv2.rectangle(display_frame, (0, 0), (450, box_height), (0, 255, 0), 2)
+                
+                # Display Text
                 cv2.putText(
                     display_frame,
-                    f"Drone Time: {time_str}",
-                    (20, 70),
+                    f"Frame: {frame_num}",
+                    (20, 35),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
                     (0, 255, 0),
                     2,
                 )
 
-            if receive_time:
-                dt = datetime.fromtimestamp(receive_time)
-                time_str = dt.strftime("%H:%M:%S.%f")[:-3]
-                cv2.putText(
-                    display_frame,
-                    f"GCS Time: {time_str}",
-                    (20, 105),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0, 255, 0),
-                    2,
-                )
+                if wall_time:
+                    dt = datetime.fromtimestamp(wall_time)
+                    time_str = dt.strftime("%H:%M:%S.%f")[:-3]
+                    cv2.putText(
+                        display_frame,
+                        f"Drone Time: {time_str}",
+                        (20, 70),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 255, 0),
+                        2,
+                    )
 
-            if latency is not None:
-                color = (0, 255, 0) if latency < 150 else (0, 0, 255)
-                cv2.putText(
-                    display_frame,
-                    f"Latency: {latency:.1f} ms",
-                    (20, 140),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    color,
-                    2,
-                )
+                if receive_time:
+                    dt = datetime.fromtimestamp(receive_time)
+                    time_str = dt.strftime("%H:%M:%S.%f")[:-3]
+                    cv2.putText(
+                        display_frame,
+                        f"GCS Time: {time_str}",
+                        (20, 105),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 255, 0),
+                        2,
+                    )
+
+                if latency is not None:
+                    color = (0, 255, 0) if latency < 150 else (0, 0, 255)
+                    cv2.putText(
+                        display_frame,
+                        f"Latency: {latency:.1f} ms",
+                        (20, 140),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        color,
+                        2,
+                    )
+                
+                # Recording indicator
+                if receiver.recording:
+                    cv2.putText(
+                        display_frame,
+                        "REC",
+                        (20, 170),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 0, 255),
+                        2,
+                    )
+                    cv2.circle(display_frame, (100, 162), 8, (0, 0, 255), -1)
 
             cv2.imshow("GCS Stream (Threaded)", display_frame)
 
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 break
+            elif key == ord("r"):
+                if receiver.recording:
+                    receiver.stop_recording()
+                else:
+                    # Get frame dimensions for video writer
+                    h, w = frame.shape[:2]
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"recording_{timestamp}.mp4"
+                    receiver.start_recording(filename=filename, fps=60, resolution=(w, h))
+                    
     finally:
         receiver.stop()
         cv2.destroyAllWindows()
@@ -247,7 +304,7 @@ def benchmark_video_stream(duration=30):
                 current_avg = sum(latencies[-30:]) / 30 if latencies else 0
                 print(f"Sampled {frames_counted} | Current Avg: {current_avg:.1f}ms")
             else:
-                time.sleep(0.01)  #
+                time.sleep(0.01)
 
     finally:
         receiver.stop()

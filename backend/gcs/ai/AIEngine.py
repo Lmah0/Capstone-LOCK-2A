@@ -92,7 +92,7 @@ _init_tracker_config()
 
 class TrackingEngine:
     def __init__(self):
-        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models', 'yolo11n.pt')
+        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models', 'yolo26n.pt')
         if not os.path.exists(model_path):
             print(f"Warning: Model not found at {model_path}")
             print("YOLO will attempt to download the model...")
