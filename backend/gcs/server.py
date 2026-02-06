@@ -143,7 +143,8 @@ async def video_streaming_task():
             
             newest_telemetry = metadata # Update newest telemetry for flight computer task
             telemetry_event.set() # Notify flight_computer_background_task new telemetry is available
-
+            previous_tracking_state = False
+            
             # --- D. AI Processing (Common for both sources) ---
             try:
                 # Get Cursor/Click data
@@ -152,6 +153,11 @@ async def video_streaming_task():
 
                 # Run AI (Wait for result)
                 annotated_frame = await process_frame(frame, metadata, cursor, click)
+
+                current_tracking_state = STATE.tracking
+                if previous_tracking_state and not current_tracking_state: # Tracking was lost - save recording if previously active
+                    save_current_recording()
+                previous_tracking_state = current_tracking_state
 
                 if click is not None:
                     CURSOR_HANDLER.clear_click()
