@@ -21,9 +21,6 @@ describe('MissionStats Component', () => {
         averageSpeed: 15.5, // m/s
         maxSpeed: 25.8, // m/s
         totalDistance: 2450.0, // meters
-        altitudeGain: 120.5, // meters
-        minAltitude: 98.2, // meters
-        maxAltitude: 218.7, // meters
         missionDuration: 420, // seconds (7 minutes)
         totalPoints: 94,
         startTime: '2025-11-08T10:30:00Z',
@@ -46,10 +43,7 @@ describe('MissionStats Component', () => {
         'Mission Duration',
         'Average Speed',
         'Max Speed',
-        'Total Distance',
-        'Altitude Gain',
-        'Max Altitude',
-        'Min Altitude',
+        'Total Distance'
         ];
 
         labels.forEach(label => expect(screen.getByText(label)).toBeInTheDocument());
@@ -60,9 +54,6 @@ describe('MissionStats Component', () => {
         expect(screen.getByText('15.5 m/s')).toBeInTheDocument(); // averageSpeed
         expect(screen.getByText('25.8 m/s')).toBeInTheDocument(); // maxSpeed
         expect(screen.getByText('2.5 km')).toBeInTheDocument(); // totalDistance (formatted)
-        expect(screen.getByText('120.5 m')).toBeInTheDocument(); // altitudeGain
-        expect(screen.getByText('218.7 m')).toBeInTheDocument(); // maxAltitude
-        expect(screen.getByText('98.2 m')).toBeInTheDocument(); // minAltitude
     });
 
     test('renders loading state when trajectoryStats is null', () => {

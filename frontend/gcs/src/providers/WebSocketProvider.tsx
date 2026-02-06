@@ -11,6 +11,7 @@ interface WebSocketContextType {
   droneConnection: boolean;
   trackingData: any;
   flightMode: Number;
+  isRecording: boolean;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -34,6 +35,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [droneConnection, setDroneConnection] = useState<boolean>(false);
   const [trackingData, setTrackingData] = useState<trackingData | null>(null);
   const [flightMode, setFlightMode] = useState<Number>(-1);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const droneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -97,6 +99,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Connection is considered active if we're receiving telemetry
           setDroneConnection(true);
           setTrackingData({ tracking: data.tracking, tracked_class: data.tracked_class, distance_to_target: data.distance_to_target })
+          setIsRecording(data.is_recording);
 
           // Reset drone connection timeout - if we don't receive data for 5 seconds, mark as disconnected
           if (droneTimeoutRef.current) {
@@ -159,7 +162,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     batteryData, 
     droneConnection,
     trackingData,
-    flightMode
+    flightMode,
+    isRecording
   };
 
   return (

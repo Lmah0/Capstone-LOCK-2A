@@ -16,16 +16,14 @@ import axios from 'axios';
 interface ControlsProps {
     showHUDElements: boolean;
     setShowHUDElements: React.Dispatch<React.SetStateAction<boolean>>;
-    isRecording: boolean;
-    setIsRecording: React.Dispatch<React.SetStateAction<boolean>>;
     isMetric: boolean;
     setIsMetric: React.Dispatch<React.SetStateAction<boolean>>;
     followDistance: number;
     setFollowDistance: React.Dispatch<React.SetStateAction<number>>;
 }
 
-export default function Controls({ showHUDElements, setShowHUDElements, isRecording, setIsRecording, isMetric, setIsMetric, followDistance, setFollowDistance}: ControlsProps) {
-    const { trackingData, flightMode} = useWebSocket();
+export default function Controls({ showHUDElements, setShowHUDElements, isMetric, setIsMetric, followDistance, setFollowDistance}: ControlsProps) {
+    const { trackingData, flightMode, isRecording} = useWebSocket();
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
@@ -38,9 +36,6 @@ export default function Controls({ showHUDElements, setShowHUDElements, isRecord
     };
     const handleRecordingToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
         axios.post('http://localhost:8766/recording')
-        .then(response => {
-            setIsRecording(response.data.is_recording);
-        })
         .catch(error => {
             console.error('Error toggling recording:', error);
         });

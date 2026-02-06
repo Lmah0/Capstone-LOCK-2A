@@ -49,6 +49,8 @@ async def flight_computer_background_task():
                     try:
                         data = json.loads(message)
 
+                        data["is_recording"] = TELEMETRY_RECORDER.is_recording
+
                         data["tracking"] = STATE.tracking # Add tracking state
                         if STATE.tracked_class is not None and ENGINE.model is not None:
                             data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
@@ -374,7 +376,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 def save_current_recording():
     """Stop recording and save telemetry data to db if present."""
-    if not TELEMETRY_RECORDER.get_is_recording():
+    if not TELEMETRY_RECORDER.is_recording:
         return
 
     tracked_obj_data = TELEMETRY_RECORDER.stop_and_get_data()

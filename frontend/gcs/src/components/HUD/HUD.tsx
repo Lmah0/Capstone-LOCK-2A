@@ -8,15 +8,14 @@ import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked';
 import { useWebSocket } from '@/providers/WebSocketProvider';
 
 interface HUDProps {
-    isRecording: boolean;
     showHUDElements: boolean;
     pinnedTelemetry: string[];
     isMetric: boolean;
     followDistance: number;
 }
 
-export default function HUD({ isRecording, showHUDElements, pinnedTelemetry, isMetric, followDistance }: HUDProps) {
-    const {droneConnection} = useWebSocket();
+export default function HUD({ showHUDElements, pinnedTelemetry, isMetric, followDistance }: HUDProps) {
+    const {droneConnection, isRecording} = useWebSocket();
     return (
         <div id='HUD' className="w-full h-full relative">
             <div id='video-feed' className="absolute inset-0 z-0">

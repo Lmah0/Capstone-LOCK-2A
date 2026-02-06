@@ -53,9 +53,6 @@ class TelemetryRecorder:
         self.recorded_data.clear()
         return data
 
-    def get_is_recording(self):
-        return self.is_recording
-
     def record_telemetry(self, data: dict):
         """
         Record telemetry only called when:
