@@ -284,18 +284,13 @@ def delete_object_endpoint(object_id: str):
 @app.post("/recording")
 def toggle_recording():
     if TELEMETRY_RECORDER.is_recording:
-        tracked_obj_data = TELEMETRY_RECORDER.stop_and_get_data()
-        if tracked_obj_data:
-            try:
-                classification = "unknown"
-                if STATE.tracked_class is not None:
-                    classification = ENGINE.model.names[STATE.tracked_class]
-                record_telemetry_data(tracked_obj_data, classification=classification)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to save recording data: {str(e)}"
-                )
+        try:
+            save_current_recording()
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to save recording data: {str(e)}"
+            )
         return {"is_recording": False}
     TELEMETRY_RECORDER.start()
     return {"is_recording": True}
@@ -334,14 +329,7 @@ async def set_flight_mode(request: dict = Body(...)):
 async def stop_following():
     """Stop following the target"""
     try:
-        if TELEMETRY_RECORDER.get_is_recording():
-            tracked_obj_data = TELEMETRY_RECORDER.stop_and_get_data()
-            if tracked_obj_data:
-                classification = "unknown"
-                if STATE.tracked_class is not None:
-                    classification = ENGINE.model.names[STATE.tracked_class]
-                record_telemetry_data(tracked_obj_data,classification=classification)
-
+        save_current_recording()
         STATE.reset_tracking()
         await send_data_to_connections({"command": "stop_following"}, flight_comp_ws)
         return {"status": 200, "message": "Stopped following the target."}
@@ -383,6 +371,21 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
+
+def save_current_recording():
+    """Stop recording and save telemetry data to db if present."""
+    if not TELEMETRY_RECORDER.get_is_recording():
+        return
+
+    tracked_obj_data = TELEMETRY_RECORDER.stop_and_get_data()
+    if not tracked_obj_data:
+        return
+
+    classification = "unknown"
+    if STATE.tracked_class is not None:
+        classification = ENGINE.model.names[STATE.tracked_class]
+
+    record_telemetry_data(tracked_obj_data, classification=classification)
 
 
 if __name__ == "__main__":
