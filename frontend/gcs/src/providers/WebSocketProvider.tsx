@@ -12,6 +12,7 @@ interface WebSocketContextType {
   trackingData: any;
   flightMode: Number;
   isRecording: boolean;
+  setIsRecording: (value: boolean) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -163,7 +164,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     droneConnection,
     trackingData,
     flightMode,
-    isRecording
+    isRecording,
+    setIsRecording
   };
 
   return (

@@ -23,7 +23,7 @@ interface ControlsProps {
 }
 
 export default function Controls({ showHUDElements, setShowHUDElements, isMetric, setIsMetric, followDistance, setFollowDistance}: ControlsProps) {
-    const { trackingData, flightMode, isRecording} = useWebSocket();
+    const { trackingData, flightMode, isRecording, setIsRecording} = useWebSocket();
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
@@ -35,9 +35,12 @@ export default function Controls({ showHUDElements, setShowHUDElements, isMetric
         setShowHUDElements(event.target.checked);
     };
     const handleRecordingToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const newRecordingState = event.target.checked;
+        setIsRecording(newRecordingState);
         axios.post('http://localhost:8766/recording')
         .catch(error => {
             console.error('Error toggling recording:', error);
+            setIsRecording(!newRecordingState);
         });
     };
     const handleMetricToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
