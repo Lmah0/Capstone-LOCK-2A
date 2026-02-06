@@ -16,7 +16,7 @@ import numpy as np
 from database import get_all_objects, delete_object, record_telemetry_data
 from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame, TELEMETRY_RECORDER
 from dotenv import load_dotenv
-from GeoLocate import calculate_distance
+from GeoLocate import calculate_horizontal_distance
 from webrtc import webrtc_router, write_frame, get_peer_connections
 from receiveVideoStream import VideoStreamReceiver
 import threading
@@ -62,7 +62,7 @@ async def flight_computer_background_task():
                             drone_lat = data.get("latitude")
                             drone_lon = data.get("longitude")
                             if drone_lat is not None and drone_lon is not None:
-                                distance_meters = calculate_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
+                                distance_meters = calculate_horizontal_distance(drone_lat, drone_lon, STATE.target_latitude, STATE.target_longitude)
                                 data["distance_to_target"] = distance_meters
                             else:
                                 data["distance_to_target"] = None
