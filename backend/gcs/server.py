@@ -334,6 +334,14 @@ async def set_flight_mode(request: dict = Body(...)):
 async def stop_following():
     """Stop following the target"""
     try:
+        if TELEMETRY_RECORDER.get_is_recording():
+            tracked_obj_data = TELEMETRY_RECORDER.stop_and_get_data()
+            if tracked_obj_data:
+                classification = "unknown"
+                if STATE.tracked_class is not None:
+                    classification = ENGINE.model.names[STATE.tracked_class]
+                record_telemetry_data(tracked_obj_data,classification=classification)
+
         STATE.reset_tracking()
         await send_data_to_connections({"command": "stop_following"}, flight_comp_ws)
         return {"status": 200, "message": "Stopped following the target."}
