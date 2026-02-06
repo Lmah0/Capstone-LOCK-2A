@@ -38,7 +38,6 @@ async def get_object_data(object_id: str):
                     "timestamp": position.get('ts'),
                     "latitude": float(position.get('lat', 0)),
                     "longitude": float(position.get('lon', 0)),
-                    "altitude": float(position.get('alt', 0)),
                     "speed": float(position.get('speed', 0)),
                     "heading": float(position.get('heading', 0))
                 }

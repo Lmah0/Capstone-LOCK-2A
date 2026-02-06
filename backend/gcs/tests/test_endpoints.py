@@ -78,27 +78,33 @@ async def test_delete_object_endpoint_not_found(async_client):
 
 # ------------------ Record Endpoint Tests ------------------
 @pytest.mark.asyncio
-async def test_record_endpoint_failure(async_client):
-    """Test /record endpoint with invalid data."""
-    response = await async_client.post("/record", json={"data": [{"x": 1, "y": 2}]})
-    assert response.status_code == 400 # Missing 'data' key
-
-
-@pytest.mark.asyncio
 async def test_record_endpoint_success(async_client):
-    """Test /record endpoint with valid data."""
-    response = await async_client.post("/record", json={
-        "data": [{"timestamp": 1625247600, "latitude": 37.7749, "longitude": -122.4194}]
-    })
-    assert response.status_code == 200 # Successful recording
+    mock_recording = MagicMock()
+    mock_recording.is_recording = False
 
+    with patch("server.TELEMETRY_RECORDER", mock_recording), \
+         patch("server.record_telemetry_data"):
 
-@pytest.mark.asyncio
-async def test_record_endpoint_missing_data(async_client):
-    """Test /record endpoint with missing 'data' key."""
-    response = await async_client.post("/record", json={})
-    assert response.status_code == 400 # Missing 'data' key
+        # ---- START RECORDING ----
+        def fake_start():
+            mock_recording.is_recording = True
+        mock_recording.start.side_effect = fake_start
 
+        start_response = await async_client.post("/recording")
+        assert start_response.status_code == 200
+        assert start_response.json()["is_recording"] is True
+        mock_recording.start.assert_called_once()
+
+        # ---- STOP RECORDING ----
+        def fake_stop_and_get_data():
+            mock_recording.is_recording = False
+            return [{"id": "64dbbe66-7117-4f2a-b7db-58a407588682","class": "person",}]
+        mock_recording.stop_and_get_data.side_effect = fake_stop_and_get_data
+
+        stop_response = await async_client.post("/recording")
+        assert stop_response.status_code == 200
+        assert stop_response.json()["is_recording"] is False
+        mock_recording.stop_and_get_data.assert_called_once()
 
 # ------------------ Flight Mode Tests ------------------
 @pytest.mark.asyncio

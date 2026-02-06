@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Card, CardContent, Typography, Box, Stack, Divider } from "@mui/material";
-import { Speed, AccessTime, Place, Navigation, Height, Timeline } from "@mui/icons-material";
+import { Speed, AccessTime, Place, Navigation, Timeline } from "@mui/icons-material";
 import { popupData } from "@/utils/types";
 
 interface MapPopupContentProps {
@@ -12,7 +12,6 @@ export const MapPopupContent: React.FC<MapPopupContentProps> = ({telemetrydata})
   const { telemetryPoint, pointIndex } = telemetrydata;
   const longitude = telemetryPoint.longitude || 0;
   const latitude = telemetryPoint.latitude || 0;
-  const altitude = telemetryPoint.altitude || 0;
   const actualSpeed = telemetryPoint.speed.toFixed(2) || "N/A";
   const heading = telemetryPoint.heading;
   const actualTimestamp = telemetryPoint.timestamp;
@@ -147,31 +146,6 @@ export const MapPopupContent: React.FC<MapPopupContentProps> = ({telemetrydata})
                   {formatCoordinate(longitude, 'lng')}
                 </Typography>
               </Stack>
-              {altitude !== undefined && (
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
-                    Altitude
-                  </Typography>
-                  <Stack direction="row" alignItems="center" spacing={0.5}>
-                    <Height sx={{ fontSize: 14, color: '#64748b' }} />
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        fontFamily: 'Monaco, Consolas, monospace', 
-                        fontWeight: 600, 
-                        color: '#1e293b',
-                        background: 'rgba(255,255,255,0.8)',
-                        px: 1,
-                        py: 0.5,
-                        borderRadius: 1,
-                        border: '1px solid #e2e8f0'
-                      }}
-                    >
-                      {altitude.toFixed(1)} m
-                    </Typography>
-                  </Stack>
-                </Stack>
-              )}
             </Stack>
           </Box>
 

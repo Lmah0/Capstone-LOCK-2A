@@ -45,7 +45,7 @@ export default function Home() {
   return (
     <div className="font-sans min-h-screen w-full flex flex-col bg-black">
       <div className={`w-full bg-neutral-900 ${isFullscreen ? 'h-screen' : 'h-[65vh]'} ${!isFullscreen ? 'border-b border-neutral-800' : ''}`}>
-        <HUD 
+        <HUD
             showHUDElements={showHUDElements} 
             pinnedTelemetry={pinnedTelemetry} 
             isMetric={isMetric} 

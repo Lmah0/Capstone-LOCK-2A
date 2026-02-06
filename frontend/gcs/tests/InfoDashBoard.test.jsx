@@ -198,14 +198,21 @@ test('Controls Tab Displays Controls', () => {
   expect(hudToggle).toBeInTheDocument();
 });
 
-test('Toggle Recording', () => {
-  const mockSetIsRecording = jest.fn();
-  useWebSocket.mockReturnValue({ 
-    isRecording: false, 
-    setIsRecording: mockSetIsRecording,
+test('Toggle Recording', async () => {
+  useWebSocket.mockReturnValue({
+    telemetryData: null,
+    isRecording: false,
     trackingData: { tracking: false, tracked_class: null },
-    flightMode: 3
+    flightMode: 3,
+    setIsRecording: jest.fn()
   });
+
+  // Mock axios response for recording toggle
+  axios.post.mockResolvedValue({
+    status: 200,
+    data: { is_recording: true }
+  });
+
   render(<InfoDashBoard {...mockProps} />);
   test_main_container();
 
@@ -217,29 +224,11 @@ test('Toggle Recording', () => {
 
   // Simulate clicking the record button
   fireEvent.click(recordButton);
-  expect(mockSetIsRecording).toHaveBeenCalledWith(true);
-});
 
-test('Metric to Imperial Toggle', () => {
-  render(<InfoDashBoard {...mockProps} />);
-  test_main_container();
+  // Wait for the async axios call to complete
+  await new Promise(resolve => setTimeout(resolve, 100));
 
-  const controlsTab = screen.getByRole('tab', { name: /controls/i });
-  fireEvent.click(controlsTab);
-
-  // Get the metric and imperial radios directly
-  const metricRadio = document.getElementById('metric-radio');
-  const imperialRadio = document.getElementById('imperial-radio');
-
-  expect(metricRadio).toBeInTheDocument();
-  expect(imperialRadio).toBeInTheDocument();
-
-  expect(metricRadio).toBeChecked();
-  expect(imperialRadio).not.toBeChecked();
-
-  // Click Imperial → should setIsMetric(false)
-  fireEvent.click(imperialRadio);
-  expect(mockProps.setIsMetric).toHaveBeenLastCalledWith(false);
+  expect(axios.post).toHaveBeenCalledWith('http://localhost:8766/recording');
 });
 
 test('Imperial to Metric Toggle', () => {

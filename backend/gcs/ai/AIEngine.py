@@ -38,6 +38,36 @@ class TrackingConfig:
     TRACKER_TYPE = None           # Will be auto-detected: 'vittrack' or 'csrt'
     VITTRACK_MODEL = None          # Path to VitTrack model file
 
+class TelemetryRecorder:
+    def __init__(self):
+        self.is_recording = False
+        self.recorded_data = []
+
+    def start(self):
+        self.is_recording = True
+        self.recorded_data.clear()
+
+    def stop_and_get_data(self):
+        self.is_recording = False
+        data = self.recorded_data.copy()
+        self.recorded_data.clear()
+        return data
+
+    def record_telemetry(self, data: dict):
+        """
+        Record telemetry only called when:
+        - recording enabled
+        - tracking enabled
+        """
+        point = {
+            "timestamp": data["timestamp"],
+            "latitude": float(data["latitude"]),
+            "longitude": float(data["longitude"]),
+            "speed": float(data["speed"]),
+            "heading": float(data["heading"]),
+        }
+        self.recorded_data.append(point)
+
 def _init_tracker_config():
     """Initialize tracker type based on GPU availability"""
     base_dir = os.path.dirname(os.path.abspath(__file__))

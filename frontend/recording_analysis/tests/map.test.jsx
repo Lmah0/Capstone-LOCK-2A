@@ -53,9 +53,9 @@ jest.mock('../src/hooks/useMapAnimation', () => ({
 process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN = 'mock-token';
 
 const mockTelemetryData = [
-  { timestamp: '2025-11-08T10:30:00Z', latitude: 37.7749, longitude: -122.4194, altitude: 100, speed: 5.5, objectClass: 'person'},
-  { timestamp: '2025-11-08T10:30:30Z', latitude: 37.7750, longitude: -122.4195, altitude: 105, speed: 6.2, objectClass: 'person' },
-  { timestamp: '2025-11-08T10:31:00Z', latitude: 37.7751, longitude: -122.4196, altitude: 110, speed: 7.1, objectClass: 'person' },
+  { timestamp: '2025-11-08T10:30:00Z', latitude: 37.7749, longitude: -122.4194, speed: 5.5, objectClass: 'person'},
+  { timestamp: '2025-11-08T10:30:30Z', latitude: 37.7750, longitude: -122.4195, speed: 6.2, objectClass: 'person' },
+  { timestamp: '2025-11-08T10:31:00Z', latitude: 37.7751, longitude: -122.4196, speed: 7.1, objectClass: 'person' },
 ];
 
 // -------------------- Helpers --------------------

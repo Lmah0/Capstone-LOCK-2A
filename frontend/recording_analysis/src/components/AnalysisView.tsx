@@ -35,7 +35,6 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ objectId }) => {
         timestamp: point.timestamp,
         latitude: Number(point.latitude),
         longitude: Number(point.longitude),
-        altitude: Number(point.altitude),
         speed: Number(point.speed),
         heading: Number(point.heading)
        }));

@@ -14,7 +14,7 @@ import cv2
 import time
 import numpy as np
 from database import get_all_objects, delete_object, record_telemetry_data
-from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame
+from ai.AI import ENGINE, STATE, CURSOR_HANDLER, process_frame, TELEMETRY_RECORDER
 from dotenv import load_dotenv
 from GeoLocate import calculate_horizontal_distance
 from webrtc import webrtc_router, write_frame, get_peer_connections
@@ -48,6 +48,9 @@ async def flight_computer_background_task():
                 async for message in ws:
                     try:
                         data = json.loads(message)
+
+                        data["is_recording"] = TELEMETRY_RECORDER.is_recording
+
                         data["tracking"] = STATE.tracking # Add tracking state
                         if STATE.tracked_class is not None and ENGINE.model is not None:
                             data["tracked_class"] = ENGINE.model.names[STATE.tracked_class]
@@ -128,6 +131,9 @@ async def video_streaming_task():
                                 "flight_mode":-1,
                                 "battery_remaining":-1,
                                 "battery_voltage":-1,
+                                "altitude" : -1,
+                                "timestamp" : -1,
+                                "speed" : -1
                         }
 
             # --- If live video and mock both fail then sleep and retry ---
@@ -137,7 +143,8 @@ async def video_streaming_task():
             
             newest_telemetry = metadata # Update newest telemetry for flight computer task
             telemetry_event.set() # Notify flight_computer_background_task new telemetry is available
-
+            previous_tracking_state = False
+            
             # --- D. AI Processing (Common for both sources) ---
             try:
                 # Get Cursor/Click data
@@ -146,6 +153,11 @@ async def video_streaming_task():
 
                 # Run AI (Wait for result)
                 annotated_frame = await process_frame(frame, metadata, cursor, click)
+
+                current_tracking_state = STATE.tracking
+                if previous_tracking_state and not current_tracking_state: # Tracking was lost - save recording if previously active
+                    save_current_recording()
+                previous_tracking_state = current_tracking_state
 
                 if click is not None:
                     CURSOR_HANDLER.clear_click()
@@ -277,34 +289,19 @@ def delete_object_endpoint(object_id: str):
     except Exception:
         raise HTTPException(status_code=500, detail=f"Failed to delete object")
 
-@app.post("/record")
-async def record(request: dict = Body(...)):
-    """Record tracked object data"""
-    data = request.get("data")
-    if not data:
-        raise HTTPException(status_code=400, detail="Missing 'data'")
-
-    required_fields = ("timestamp", "latitude", "longitude")
-    # Validate point data
-    for idx, point in enumerate(data):
-        missing = [f for f in required_fields if point.get(f) is None]
-        if missing:
+@app.post("/recording")
+def toggle_recording():
+    if TELEMETRY_RECORDER.is_recording:
+        try:
+            save_current_recording()
+        except Exception as e:
             raise HTTPException(
-                status_code=400,
-                detail=f"Missing fields {missing} in data point at index {idx}",
+                status_code=500, 
+                detail=f"Failed to save recording data: {str(e)}"
             )
-
-    try:
-        # Get classification name if tracking, otherwise use "unknown"
-        classification = "unknown"
-        if STATE.tracked_class is not None:
-            classification = ENGINE.model.names[STATE.tracked_class]
-
-        record_telemetry_data(data, classification=classification)
-        return {"status": 200, "message": "Data recorded successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record data: {str(e)}")
-
+        return {"is_recording": False}
+    TELEMETRY_RECORDER.start()
+    return {"is_recording": True}
 
 # -- Flight Computer Communication Endpoints --
 @app.post("/setFollowDistance")
@@ -340,6 +337,7 @@ async def set_flight_mode(request: dict = Body(...)):
 async def stop_following():
     """Stop following the target"""
     try:
+        save_current_recording()
         STATE.reset_tracking()
         await send_data_to_connections({"command": "stop_following"}, flight_comp_ws)
         return {"status": 200, "message": "Stopped following the target."}
@@ -381,6 +379,21 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
+
+def save_current_recording():
+    """Stop recording and save telemetry data to db if present."""
+    if not TELEMETRY_RECORDER.is_recording:
+        return
+
+    tracked_obj_data = TELEMETRY_RECORDER.stop_and_get_data()
+    if not tracked_obj_data:
+        return
+
+    classification = "unknown"
+    if STATE.tracked_class is not None:
+        classification = ENGINE.model.names[STATE.tracked_class]
+
+    record_telemetry_data(tracked_obj_data, classification=classification)
 
 
 if __name__ == "__main__":

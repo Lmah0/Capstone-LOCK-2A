@@ -200,8 +200,8 @@ test('Start Recording', () => {
   useWebSocket.mockReturnValue({ 
     connectionStatus: 'disconnected', 
     droneConnection: false, 
-    telemetryData: null, 
-    isRecording: true,
+    telemetryData: null,
+    isRecording: true, 
     flightMode: 3
   });
   render(<HUD {...mockProps} />);
