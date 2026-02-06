@@ -203,7 +203,8 @@ test('Toggle Recording', async () => {
     telemetryData: null,
     isRecording: false,
     trackingData: { tracking: false, tracked_class: null },
-    flightMode: 3
+    flightMode: 3,
+    setIsRecording: jest.fn()
   });
 
   // Mock axios response for recording toggle
