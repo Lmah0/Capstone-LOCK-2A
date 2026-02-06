@@ -49,7 +49,9 @@ class TelemetryRecorder:
 
     def stop_and_get_data(self):
         self.is_recording = False
-        return self.recorded_data
+        data = self.recorded_data.copy()
+        self.recorded_data.clear()
+        return data
 
     def get_is_recording(self):
         return self.is_recording
@@ -64,7 +66,6 @@ class TelemetryRecorder:
             "timestamp": data["timestamp"],
             "latitude": float(data["latitude"]),
             "longitude": float(data["longitude"]),
-            "altitude": float(data["altitude"]),
             "speed": float(data["speed"]),
             "heading": float(data["heading"]),
         }

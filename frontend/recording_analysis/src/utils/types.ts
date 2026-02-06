@@ -2,7 +2,6 @@ export interface TelemetryPoint {
   timestamp: string; // ISO timestamp string
   latitude: number;
   longitude: number;
-  altitude: number; // meters
   speed: number; // m/s
   heading: number; // degrees (0-360)
 }
@@ -11,9 +10,6 @@ export interface TrajectoryStats {
   averageSpeed: number; // m/s
   maxSpeed: number; // m/s
   totalDistance: number; // meters
-  altitudeGain: number; // meters
-  minAltitude: number; // meters
-  maxAltitude: number; // meters
   missionDuration: number; // seconds
   totalPoints: number;
   startTime: string;

@@ -9,9 +9,6 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[], objCla
       averageSpeed: 0,
       maxSpeed: 0,
       totalDistance: 0,
-      altitudeGain: 0,
-      minAltitude: 0,
-      maxAltitude: 0,
       missionDuration: 0,
       totalPoints: 0,
       startTime: "",
@@ -30,14 +27,6 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[], objCla
   const averageSpeed = speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length;
   const maxSpeed = Math.max(...speeds);
 
-  // Calculate altitude statistics
-  const altitudes = telemetryData.map(point => point.altitude);
-  const maxAltitude = Math.max(...altitudes);
-  const minAltitude = Math.min(...altitudes);
-  
-  // Calculate altitude difference
-  const altitudeGain = telemetryData[telemetryData.length - 1].altitude - telemetryData[0].altitude;
-
   // Calculate total distance using Haversine formula
   let totalDistance = 0;
   for (let i = 1; i < telemetryData.length; i++) {
@@ -50,9 +39,6 @@ export const calculateTrajectoryStats = (telemetryData: TelemetryPoint[], objCla
     averageSpeed: Number(averageSpeed.toFixed(1)),
     maxSpeed: Number(maxSpeed.toFixed(1)),
     totalDistance: Number((totalDistance * 1000).toFixed(1)), // Convert to meters
-    altitudeGain: Number(altitudeGain.toFixed(1)),
-    minAltitude: Number(minAltitude.toFixed(1)),
-    maxAltitude: Number(maxAltitude.toFixed(1)),
     missionDuration: Number(missionDuration.toFixed(0)),
     totalPoints: telemetryData.length,
     startTime: telemetryData[0].timestamp,
@@ -109,12 +95,6 @@ export const formatSpeed = (speed: number): string => {
   return `${speed} m/s`;
 };
 
-/**
- * Formats altitude with appropriate units
- */
-export const formatAltitude = (altitude: number): string => {
-  return `${altitude} m`;
-};
 
 /**
  * Formats distance with appropriate units
