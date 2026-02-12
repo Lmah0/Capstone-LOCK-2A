@@ -20,6 +20,13 @@ from GeoLocate import calculate_horizontal_distance
 from webrtc import webrtc_router, write_frame, get_peer_connections
 from receiveVideoStream import VideoStreamReceiver
 import threading
+from performance_monitor import perf_monitor
+
+# ===== PERFORMANCE MONITORING CONFIG =====
+ENABLE_PERFORMANCE_MONITORING = False  # Set to False to disable all monitoring
+if not ENABLE_PERFORMANCE_MONITORING:
+    perf_monitor.disable()
+# =========================================
 
 load_dotenv(dotenv_path="../../.env")
 
@@ -91,60 +98,65 @@ async def video_streaming_task():
     # Target 60 FPS for the loop
     target_interval = 1.0 / 60.0
 
+    # Performance monitoring - print stats every 5 seconds
+    last_perf_print = time.time()
+
     try:
         while not video_stop_event.is_set():
             loop_start = time.time()
 
             # --- Try Reading Live Stream ---
-            frame, metadata = video_receiver.read()
+            with perf_monitor.measure("video_receive"):
+                frame, metadata = video_receiver.read()
 
             # --- Fallback Logic ---
             if frame is None:
-                # Open Local Video File (Fallback)
-                cap = cv2.VideoCapture(VIDEO_PATH)
-                fallback_available = cap.isOpened()
-                if not fallback_available:
-                    print(f"WARNING: Could not open fallback video: {VIDEO_PATH}")
-                if fallback_available:
-                    ret, file_frame = cap.read()
-
-                    # Handle End of File (Loop video)
-                    if not ret:
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                with perf_monitor.measure("video_fallback_mock"):
+                    # Open Local Video File (Fallback)
+                    cap = cv2.VideoCapture(VIDEO_PATH)
+                    fallback_available = cap.isOpened()
+                    if not fallback_available:
+                        print(f"WARNING: Could not open fallback video: {VIDEO_PATH}")
+                    if fallback_available:
                         ret, file_frame = cap.read()
 
-                    if ret:
-                        frame = file_frame
-                        # Inject dummy metadata
-                        metadata = {
-                                "last_time": -1,
-                                "latitude":-1,
-                                "longitude":-1,
-                                "rth_altitude":-1,
-                                "dlat":-1,
-                                "dlon":-1,
-                                "dalt":-1,
-                                "heading":-1,
-                                "roll":-1,
-                                "pitch":-1,
-                                "yaw":-1,
-                                "flight_mode":-1,
-                                "battery_remaining":-1,
-                                "battery_voltage":-1,
-                                "altitude" : -1,
-                                "timestamp" : -1,
-                                "speed" : -1
-                        }
+                        # Handle End of File (Loop video)
+                        if not ret:
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                            ret, file_frame = cap.read()
+
+                        if ret:
+                            frame = file_frame
+                            # Inject dummy metadata
+                            metadata = {
+                                    "last_time": -1,
+                                    "latitude":-1,
+                                    "longitude":-1,
+                                    "rth_altitude":-1,
+                                    "dlat":-1,
+                                    "dlon":-1,
+                                    "dalt":-1,
+                                    "heading":-1,
+                                    "roll":-1,
+                                    "pitch":-1,
+                                    "yaw":-1,
+                                    "flight_mode":-1,
+                                    "battery_remaining":-1,
+                                    "battery_voltage":-1,
+                                    "altitude" : -1,
+                                    "timestamp" : -1,
+                                    "speed" : -1
+                            }
 
             # --- If live video and mock both fail then sleep and retry ---
             if frame is None:
                 await asyncio.sleep(0.1)
                 continue
-            
+
             newest_telemetry = metadata # Update newest telemetry for flight computer task
             telemetry_event.set() # Notify flight_computer_background_task new telemetry is available
             previous_tracking_state = False
-            
+
             # --- D. AI Processing (Common for both sources) ---
             try:
                 # Get Cursor/Click data
@@ -152,7 +164,8 @@ async def video_streaming_task():
                 click = CURSOR_HANDLER.click_pos
 
                 # Run AI (Wait for result)
-                annotated_frame = await process_frame(frame, metadata, cursor, click)
+                with perf_monitor.measure("ai_processing"):
+                    annotated_frame = await process_frame(frame, metadata, cursor, click)
 
                 current_tracking_state = STATE.tracking
                 if previous_tracking_state and not current_tracking_state: # Tracking was lost - save recording if previously active
@@ -165,7 +178,8 @@ async def video_streaming_task():
 
                 # Send to WebRTC
                 if annotated_frame is not None:
-                    write_frame(annotated_frame)
+                    with perf_monitor.measure("webrtc_write"):
+                        write_frame(annotated_frame)
 
             except Exception as e:
                 print(f"Error processing frame: {e}")
@@ -175,7 +189,19 @@ async def video_streaming_task():
             # Calculates how much time is left in the 1/60th second window
             elapsed = time.time() - loop_start
             sleep_time = max(0, target_interval - elapsed)
-            await asyncio.sleep(sleep_time)
+
+            with perf_monitor.measure("rate_limiting"):
+                await asyncio.sleep(sleep_time)
+
+            # Record total frame time
+            total_frame_time = (time.time() - loop_start) * 1000
+            perf_monitor.record("total_frame", total_frame_time)
+            perf_monitor.record_frame(total_frame_time)
+
+            # Print performance stats every 10 seconds (lightweight)
+            if ENABLE_PERFORMANCE_MONITORING and time.time() - last_perf_print > 10.0:
+                perf_monitor.print_summary()  # Use lightweight summary instead
+                last_perf_print = time.time()
 
     except asyncio.CancelledError:
         print("Video streaming task cancelled.")
@@ -186,6 +212,13 @@ async def video_streaming_task():
         video_receiver.stop()
         if cap.isOpened():
             cap.release()
+
+        # Print final performance stats
+        if ENABLE_PERFORMANCE_MONITORING:
+            print("\n=== FINAL PERFORMANCE STATS ===")
+            perf_monitor.print_stats(detailed=True)
+            perf_monitor.export_csv("gcs_performance_log.csv")
+
     print("Video streaming task ended.")
 
 async def follows_background_task():

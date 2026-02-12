@@ -8,6 +8,7 @@ import time
 import numpy as np
 import traceback
 import threading
+from performance_monitor import perf_monitor
 
 # Frame buffer for video streaming
 _frame_lock = threading.Lock()
@@ -31,23 +32,28 @@ class AIVideoStreamTrack(VideoStreamTrack):
             if self._start is None:
                 self._start = time.time()
 
-            pts, time_base = await self.next_timestamp()
-            
-            # Read frame from buffer
-            global _current_frame, _frame_lock
-            with _frame_lock:
-                frame = _current_frame.copy() if _current_frame is not None else None
+            with perf_monitor.measure("webrtc_recv_total"):
+                pts, time_base = await self.next_timestamp()
 
-            if frame is None:
-                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                # Read frame from buffer
+                global _current_frame, _frame_lock
+                with perf_monitor.measure("webrtc_recv_buffer_read"):
+                    with _frame_lock:
+                        frame = _current_frame.copy() if _current_frame is not None else None
 
-            # Convert BGR to RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
-            video_frame.pts = pts
-            video_frame.time_base = time_base
+                if frame is None:
+                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
-            return video_frame
+                # Convert BGR to RGB
+                with perf_monitor.measure("webrtc_recv_color_convert"):
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                with perf_monitor.measure("webrtc_recv_encode"):
+                    video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
+                    video_frame.pts = pts
+                    video_frame.time_base = time_base
+
+                return video_frame
         except Exception as e:
             print(f"WebRTC recv ERROR: {e}")
             traceback.print_exc()
@@ -97,8 +103,11 @@ async def handle_offer(offer: RTCOffer):
 def write_frame(frame):
     """Write a frame to the shared buffer for WebRTC streaming."""
     global _current_frame, _frame_lock
-    with _frame_lock:
-        _current_frame = frame
+
+    with perf_monitor.measure("webrtc_lock"):
+        with _frame_lock:
+            with perf_monitor.measure("webrtc_frame_copy"):
+                _current_frame = frame
 
 
 def get_peer_connections():

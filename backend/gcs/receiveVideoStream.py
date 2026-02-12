@@ -6,6 +6,7 @@ import time
 import json
 import threading
 from datetime import datetime
+from performance_monitor import perf_monitor
 
 # --- CONFIGURATION ---
 GCS_VIDEO_PORT = os.getenv("GCS_VIDEO_PORT", 5000)
@@ -105,19 +106,20 @@ class VideoStreamReceiver:
                     # Handle Telemetry (Metadata)
                     if packet.stream.type == "data":
                         try:
-                            payload = bytes(packet)
-                            text = payload.decode("utf-8", errors="ignore")
-                            meta = json.loads(text)
+                            with perf_monitor.measure("video_metadata_parse"):
+                                payload = bytes(packet)
+                                text = payload.decode("utf-8", errors="ignore")
+                                meta = json.loads(text)
 
-                            # Calculate Latency immediately upon arrival
-                            meta["receive_time"] = time.time()
-                            if meta.get("video_timestamp"):
-                                meta["latency_ms"] = (
-                                    meta["receive_time"] - meta["video_timestamp"]
-                                ) * 1000
+                                # Calculate Latency immediately upon arrival
+                                meta["receive_time"] = time.time()
+                                if meta.get("video_timestamp"):
+                                    meta["latency_ms"] = (
+                                        meta["receive_time"] - meta["video_timestamp"]
+                                    ) * 1000
 
-                            with self.lock:
-                                self.latest_telemetry = meta
+                                with self.lock:
+                                    self.latest_telemetry = meta
 
                         except Exception:
                             pass
@@ -125,22 +127,23 @@ class VideoStreamReceiver:
                     # Handle Video
                     elif packet.stream.type == "video":
                         try:
-                            for frame in packet.decode():
-                                img = frame.to_ndarray(format="bgr24")
-    
-                                with self.lock:
-                                    self.latest_frame = img
-                                
-                                # Write to file if recording
-                                if self.recording and self.video_writer:
-                                    self.video_writer.write(img)
-                                    
+                            with perf_monitor.measure("video_decode"):
+                                for frame in packet.decode():
+                                    img = frame.to_ndarray(format="bgr24")
+
+                                    with self.lock:
+                                        self.latest_frame = img
+
+                                    # Write to file if recording
+                                    if self.recording and self.video_writer:
+                                        self.video_writer.write(img)
+
                         except (av.FFmpegError, OSError, ValueError) as e:
                             print(f"Video Decode Error: {e}. Continuing...")
                             continue
     
             except (av.FFmpegError, OSError) as e:
-                print(f"Critical Stream Error: {e}. Retrying in 2s...")
+                # print(f"Critical Stream Error: {e}. Retrying in 2s...")
                 if container:
                     container.close()
                     container = None
