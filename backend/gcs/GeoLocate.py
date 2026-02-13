@@ -1,5 +1,7 @@
 import math
 from geographiclib.geodesic import Geodesic
+import numpy as np
+import navpy
 
 '''
 AI Helper File:
@@ -81,3 +83,68 @@ def calculate_horizontal_distance(lat1: float, lon1: float, lat2: float, lon2: f
     # geodesic inverse calculation, returns several values, we need 's12' for distance
     result = geod.Inverse(lat1, lon1, lat2, lon2) 
     return result['s12']  # distance in meters
+
+# def locate_with_fixed_gimbal()
+
+
+def intrinsics_from_fov(diagonal_fov_deg=CAM_FOV,
+                        image_width_px=IMG_WIDTH_PX,
+                        image_height_px=IMG_HEIGHT_PX):
+    """
+    Estimate the camera intrinsic matrix K using only the diagonal field of view (FOV)
+    and the resolution. This is an approximation that will function as a sanity check. Hopefully
+    we can get around to doing a camera calibration, but this can also allow for us to fly without
+    a full calibration complete (Feb. 13, 2026).
+
+    Inputs:
+        diagonal_fov_deg - Camera diagonal field of view in degrees (default is 153 degrees for our capstone camera)
+        image_width_px - Image width in pixels (default is 1280 for the capstone camera)
+        image_height_px - Image height in pixels (default is 720 for the capstone camera)
+
+    Outputs:
+        K                 : 3×3 intrinsic matrix - this is what gets outputted from a camera calibration
+        horizontal_fov    : Estimated horizontal FOV in radians - I don't think we need this for now???
+        vertical_fov      : Estimated vertical FOV in radians - Also not needed for now I think?
+    """
+
+    # Convert the diagonal FOV to radians
+    diagonal_fov_rad = np.radians(diagonal_fov_deg)
+
+    aspect_ratio = image_width_px / image_height_px  # width / height
+
+    # Solve for horizontal and vertical FOVs using the diagonal FOV and aspect ratio
+    # Math/Geometry - tan(Fd/2)^2 = tan(Fh/2)^2 + tan(Fv/2)^2 ... Note that the triangle formed by the projection follows same proportions as the pixel aspect ratio
+    tan_half_diagonal = np.tan(diagonal_fov_rad / 2)
+
+    # Normalize contribution of width/height using aspect ratio
+    normalization = np.sqrt(aspect_ratio**2 + 1)
+
+    # These give tan(Fh/2) and tan(Fv/2)
+    tan_half_horizontal = tan_half_diagonal * (aspect_ratio / normalization)
+    tan_half_vertical   = tan_half_diagonal * (1 / normalization)
+
+    # Convert them back to full horizontal/vertical FOVs in radians
+    horizontal_fov = 2 * np.arctan(tan_half_horizontal)
+    vertical_fov   = 2 * np.arctan(tan_half_vertical)
+
+    # Computer the focal lengths (fx and fy) [convert the angula FOV to focal length in pixel units]
+    fx = (image_width_px / 2) / np.tan(horizontal_fov / 2) # fx = (width/2)  / tan(Fh / 2)
+    fy = (image_height_px / 2) / np.tan(vertical_fov / 2) # fy = (height/2) / tan(Fv / 2)
+
+    # Principal point (assumption: this is the image centre)
+    cx = image_width_px / 2
+    cy = image_height_px / 2
+
+    # Intrinsic matrix K (this is what we need)
+    K = np.array([
+        [fx, 0,  cx],
+        [0,  fy, cy],
+        [0,   0,  1]
+    ])
+
+    print("Estimated camera intrinsic matrix K:\n", K)
+    return K, horizontal_fov, vertical_fov
+
+
+if __name__ == "__main__":
+    intrinsics_from_fov()
