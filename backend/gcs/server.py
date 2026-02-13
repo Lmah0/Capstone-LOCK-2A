@@ -7,6 +7,7 @@ import asyncio
 import json
 import traceback
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 import os
 import websockets
@@ -23,7 +24,7 @@ import threading
 
 load_dotenv(dotenv_path="../../.env")
 
-VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai", "video.mp4")
+VIDEO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai", "error-video.mp4")
 
 active_connections: List[WebSocket] = []
 flight_comp_ws: WebSocket = None
@@ -80,7 +81,7 @@ async def flight_computer_background_task():
 
 video_stop_event = threading.Event()
 video_receiver = VideoStreamReceiver(STREAM_URL)
-
+thread_pool = ThreadPoolExecutor(max_workers=1)
 
 async def video_streaming_task():
     """Background task that reads video, processes through AI, and streams via WebRTC"""
@@ -153,8 +154,11 @@ async def video_streaming_task():
                 click = CURSOR_HANDLER.click_pos
 
                 # Run AI (Wait for result)
-                annotated_frame = await process_frame(frame, metadata, cursor, click)
-
+                annotated_frame = await asyncio.get_event_loop().run_in_executor(
+                        thread_pool, 
+                        lambda: process_frame(frame, metadata, cursor, click) 
+                    )
+                
                 current_tracking_state = STATE.tracking
                 if previous_tracking_state and not current_tracking_state: # Tracking was lost - save recording if previously active
                     save_current_recording()

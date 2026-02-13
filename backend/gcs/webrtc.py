@@ -8,6 +8,9 @@ import time
 import numpy as np
 import traceback
 import threading
+from fractions import Fraction
+import time
+import asyncio
 
 # Frame buffer for video streaming
 _frame_lock = threading.Lock()
@@ -16,42 +19,47 @@ _current_frame = None
 # WebRTC peer connections
 _peer_connections = set()
 
+
 class AIVideoStreamTrack(VideoStreamTrack):
     """
     Custom video track that streams AI-processed frames via WebRTC.
-    Architecture: latest-frame (overwrite) buffer
+    Optimized for Low Latency using Wall Clock timestamps.
     """
     def __init__(self):
         super().__init__()
         self._start = None
+        self._timestamp = 0
 
     async def recv(self):
         """Give WebRTC the next frame to send."""
-        try:
-            if self._start is None:
-                self._start = time.time()
+        if self._start is None:
+            self._start = time.time()
 
-            pts, time_base = await self.next_timestamp()
+        # 90000 is the standard clock rate for video (90kHz)
+        timestamp = time.time() - self._start
+        pts = int(timestamp * 90000)
+        
+        # Read frame from buffer
+        global _current_frame, _frame_lock
+        with _frame_lock:
+            frame = _current_frame
             
-            # Read frame from buffer
-            global _current_frame, _frame_lock
-            with _frame_lock:
-                frame = _current_frame.copy() if _current_frame is not None else None
+        if frame is None:
+            # Send a black frame if buffer is empty
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            # Add a small sleep to prevent spinning CPU if no frames exist
+            await asyncio.sleep(0.01)
 
-            if frame is None:
-                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        # Convert BGR to RGB
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Create VideoFrame
+        video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
+        
+        video_frame.pts = pts
+        video_frame.time_base = Fraction(1, 90000)
 
-            # Convert BGR to RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
-            video_frame.pts = pts
-            video_frame.time_base = time_base
-
-            return video_frame
-        except Exception as e:
-            print(f"WebRTC recv ERROR: {e}")
-            traceback.print_exc()
-            raise
+        return video_frame
 
 
 class RTCOffer(BaseModel):
