@@ -27,9 +27,9 @@ AI Helper File:
 '''
 
 # Camera specifications
-CAM_FOV = 73.7  # Diagonal field of view in degrees
-IMG_WIDTH_PX = 1456  # Image width in pixels
-IMG_HEIGHT_PX = 1088  # Image height in pixels
+CAM_FOV = 153  # Diagonal field of view in degrees
+IMG_WIDTH_PX = 1280  # Image width in pixels
+IMG_HEIGHT_PX = 720  # Image height in pixels
 
 def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearing:float, obj_x_px:float, obj_y_px:float):
     # Calculate ground coverage area from camera FOV
