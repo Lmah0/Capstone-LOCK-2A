@@ -143,7 +143,6 @@ class VideoStreamReceiver:
                             continue
     
             except (av.FFmpegError, OSError) as e:
-                # print(f"Critical Stream Error: {e}. Retrying in 2s...")
                 if container:
                     container.close()
                     container = None

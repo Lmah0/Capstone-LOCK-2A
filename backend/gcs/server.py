@@ -101,6 +101,12 @@ async def video_streaming_task():
     # Performance monitoring - print stats every 5 seconds
     last_perf_print = time.time()
 
+    # Start fallback video once at the beginning
+    cap = cv2.VideoCapture(VIDEO_PATH)
+    fallback_available = cap.isOpened()
+    if not fallback_available:
+        print(f"Error. Could not open fallback video: {VIDEO_PATH}")
+
     try:
         while not video_stop_event.is_set():
             loop_start = time.time()
@@ -112,11 +118,6 @@ async def video_streaming_task():
             # --- Fallback Logic ---
             if frame is None:
                 with perf_monitor.measure("video_fallback_mock"):
-                    # Open Local Video File (Fallback)
-                    cap = cv2.VideoCapture(VIDEO_PATH)
-                    fallback_available = cap.isOpened()
-                    if not fallback_available:
-                        print(f"WARNING: Could not open fallback video: {VIDEO_PATH}")
                     if fallback_available:
                         ret, file_frame = cap.read()
 
