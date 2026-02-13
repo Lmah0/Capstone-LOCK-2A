@@ -33,6 +33,12 @@ CAM_FOV = 153  # Diagonal field of view in degrees
 IMG_WIDTH_PX = 1280  # Image width in pixels
 IMG_HEIGHT_PX = 720  # Image height in pixels
 
+K_ESTIMATED = np.array([ # Calculated via intrinsics_from_fov function in this file
+    [176.29040659,   0.0,          640.0],
+    [0.0,          176.29040659,   360.0],
+    [0.0,            0.0,            1.0]
+])
+
 def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearing:float, obj_x_px:float, obj_y_px:float):
     # Calculate ground coverage area from camera FOV
     cam_fov_rad = math.radians(CAM_FOV)
@@ -84,7 +90,54 @@ def calculate_horizontal_distance(lat1: float, lon1: float, lat2: float, lon2: f
     result = geod.Inverse(lat1, lon1, lat2, lon2) 
     return result['s12']  # distance in meters
 
-# def locate_with_fixed_gimbal()
+
+def locate_with_fixed_gimbal(
+        pixel_x, pixel_y,
+        drone_lat_deg, drone_lon_deg, drone_alt_m,
+        drone_roll_rad, drone_pitch_rad, drone_yaw_rad,
+        camera_matrix_K=K_ESTIMATED):
+    """
+    Compute target geolocation from pixel location in a DOWNWARD-facing camera (on a fixed gimbal).
+    roll/pitch/yaw in radians. Alt in AGL.
+    Make sure that the yaw is the ArduPilot yaw from "ATTITUDE" message since it's bound by [-pi, pi]. NOT to be confused with bearing [0, 360].
+    """
+    pixel_homogeneous = np.array([pixel_x, pixel_y, 1.0]) # normalized 3d camera ray
+
+    camera_ray = np.linalg.inv(camera_matrix_K) @ pixel_homogeneous  # Ray in camera coordinates
+
+    camera_ray /= np.linalg.norm(camera_ray) # Normalize (|ray| = 1) - preserve direction but not magnitude (don't care about magnitude)
+
+    R_camera_to_body = navpy.angle2dcm(
+        0,                   # roll
+        np.deg2rad(90),      # pitch camera down
+        0                    # yaw
+    )
+
+    R_body_to_ned = navpy.angle2dcm(
+        drone_yaw_rad,
+        drone_pitch_rad,
+        drone_roll_rad
+    )
+
+    # Combined transform: camera -> body -> NED
+    world_ray = R_body_to_ned @ (R_camera_to_body @ camera_ray)
+
+    # Figure out where the ray-plane intersects with the ground
+    t_ground = -drone_alt_m / world_ray[2]
+
+    north_offset_m = t_ground * world_ray[0]
+    east_offset_m  = t_ground * world_ray[1]
+
+    # Find the GPS coordinates of the target using the N/E offsets and the drone's current GPS location
+    # Note that this should account for the curvature of the Earth? Though it shouldn't matter because we're flying at a low altitude and curvature should be negligible.
+    target_lat_deg, target_lon_deg, _ = navpy.ned2lla(
+        [north_offset_m, east_offset_m, 0],
+        drone_lat_deg,
+        drone_lon_deg,
+        0  # reference altitude (doesn't matter when using N/E only)
+    )
+
+    return target_lat_deg, target_lon_deg
 
 
 def intrinsics_from_fov(diagonal_fov_deg=CAM_FOV,
@@ -143,6 +196,8 @@ def intrinsics_from_fov(diagonal_fov_deg=CAM_FOV,
     ])
 
     print("Estimated camera intrinsic matrix K:\n", K)
+    print("Horizontal FOV: {:.2f} degrees".format(np.degrees(horizontal_fov)))
+    print("Vertical FOV: {:.2f} degrees".format(np.degrees(vertical_fov)))
     return K, horizontal_fov, vertical_fov
 
 
