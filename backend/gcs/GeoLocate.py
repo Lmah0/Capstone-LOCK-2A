@@ -34,9 +34,9 @@ IMG_WIDTH_PX = 1280  # Image width in pixels
 IMG_HEIGHT_PX = 720  # Image height in pixels
 
 K_ESTIMATED = np.array([ # Calculated via intrinsics_from_fov function in this file
-    [176.29040659,   0.0,          640.0],
-    [0.0,          176.29040659,   360.0],
-    [0.0,            0.0,            1.0]
+    [1.03221724e+03, 0.00000000e+00, 4.65673884e+02],
+    [0.00000000e+00, 1.03121094e+03, 3.35705570e+02],
+    [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]
 ])
 
 def locate(uav_latitude: float, uav_longitude: float, uav_altitude:float, bearing:float, obj_x_px:float, obj_y_px:float):
