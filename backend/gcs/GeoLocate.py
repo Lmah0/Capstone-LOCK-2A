@@ -101,7 +101,7 @@ def locate_with_fixed_gimbal(
     roll/pitch/yaw in radians. Alt in AGL.
     Make sure that the yaw is the ArduPilot yaw from "ATTITUDE" message since it's bound by [-pi, pi]. NOT to be confused with bearing [0, 360].
     """
-    pixel_homogeneous = np.array([pixel_x, pixel_y, 1.0]) # normalized 3d camera ray
+    pixel_homogeneous = np.array([pixel_x, pixel_y, 1.0]) # homogeneous pixel coordinate (3d camera ray)
 
     camera_ray = np.linalg.inv(camera_matrix_K) @ pixel_homogeneous  # Ray in camera coordinates
 
@@ -121,6 +121,9 @@ def locate_with_fixed_gimbal(
 
     # Combined transform: camera -> body -> NED
     world_ray = R_body_to_ned @ (R_camera_to_body @ camera_ray)
+
+    if world_ray[2] >= 0:
+        raise ValueError("The computed ray does not intersect the ground (ray points upwards). Check the input parameters and camera orientation.")
 
     # Figure out where the ray-plane intersects with the ground
     t_ground = -drone_alt_m / world_ray[2]
@@ -180,7 +183,7 @@ def intrinsics_from_fov(diagonal_fov_deg=CAM_FOV,
     horizontal_fov = 2 * np.arctan(tan_half_horizontal)
     vertical_fov   = 2 * np.arctan(tan_half_vertical)
 
-    # Computer the focal lengths (fx and fy) [convert the angula FOV to focal length in pixel units]
+    # Compute the focal lengths (fx and fy) [convert the angular FOV to focal length in pixel units]
     fx = (image_width_px / 2) / np.tan(horizontal_fov / 2) # fx = (width/2)  / tan(Fh / 2)
     fy = (image_height_px / 2) / np.tan(vertical_fov / 2) # fy = (height/2) / tan(Fv / 2)
 
@@ -195,11 +198,11 @@ def intrinsics_from_fov(diagonal_fov_deg=CAM_FOV,
         [0,   0,  1]
     ])
 
-    print("Estimated camera intrinsic matrix K:\n", K)
-    print("Horizontal FOV: {:.2f} degrees".format(np.degrees(horizontal_fov)))
-    print("Vertical FOV: {:.2f} degrees".format(np.degrees(vertical_fov)))
     return K, horizontal_fov, vertical_fov
 
 
 if __name__ == "__main__":
-    intrinsics_from_fov()
+    K, horizontal_fov, vertical_fov = intrinsics_from_fov()
+    print("Estimated intrinsic matrix K:\n", K)
+    print("Estimated horizontal FOV (degrees):", np.degrees(horizontal_fov))
+    print("Estimated vertical FOV (degrees):", np.degrees(vertical_fov))
