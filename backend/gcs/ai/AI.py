@@ -3,7 +3,6 @@ GCS Backend AI Processor: WebSocket-based detection and tracking.
 Uses TrackingEngine for code sharing - EXACT SAME approach as mouse_hover_refactored.py
 """
 import time
-import asyncio
 import traceback
 import numpy as np
 from collections import deque
