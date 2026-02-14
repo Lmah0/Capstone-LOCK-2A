@@ -3,7 +3,6 @@ GCS Backend AI Processor: WebSocket-based detection and tracking.
 Uses TrackingEngine for code sharing - EXACT SAME approach as mouse_hover_refactored.py
 """
 import time
-import asyncio
 import traceback
 import numpy as np
 from collections import deque
@@ -64,10 +63,9 @@ def print_fps():
 
 print("AI Processor initialized, ready to process frames...")
 
-async def process_frame(frame, metadata, cursor_pos=None, click_pos=None):
+def process_frame(frame, metadata, cursor_pos=None, click_pos=None):
     """Process a single frame through the AI pipeline and return the annotated frame"""
     try:
-        await asyncio.sleep(0)  # Yield for cooperative multitasking
         
         frame_start_time = time.time()
         
