@@ -6,10 +6,8 @@ from pydantic import BaseModel
 import cv2
 import time
 import numpy as np
-import traceback
 import threading
 from fractions import Fraction
-import time
 import asyncio
 
 # Frame buffer for video streaming
